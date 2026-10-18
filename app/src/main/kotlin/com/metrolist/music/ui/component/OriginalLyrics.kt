@@ -76,6 +76,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -147,9 +148,7 @@ import com.metrolist.music.lyrics.LyricsTranslationHelper
 import com.metrolist.music.lyrics.LyricsUtils.findCurrentLineIndex
 import com.metrolist.music.lyrics.LyricsUtils.isBelarusian
 import com.metrolist.music.lyrics.LyricsUtils.isBulgarian
-import com.metrolist.music.lyrics.LyricsUtils.isChinese
 import com.metrolist.music.lyrics.LyricsUtils.isHindi
-import com.metrolist.music.lyrics.LyricsUtils.isJapanese
 import com.metrolist.music.lyrics.LyricsUtils.isKorean
 import com.metrolist.music.lyrics.LyricsUtils.isKyrgyz
 import com.metrolist.music.lyrics.LyricsUtils.isMacedonian
@@ -157,10 +156,8 @@ import com.metrolist.music.lyrics.LyricsUtils.isRussian
 import com.metrolist.music.lyrics.LyricsUtils.isSerbian
 import com.metrolist.music.lyrics.LyricsUtils.isUkrainian
 import com.metrolist.music.lyrics.LyricsUtils.parseLyrics
-import com.metrolist.music.lyrics.LyricsUtils.romanizeChinese
 import com.metrolist.music.lyrics.LyricsUtils.romanizeCyrillic
 import com.metrolist.music.lyrics.LyricsUtils.romanizeHindi
-import com.metrolist.music.lyrics.LyricsUtils.romanizeJapanese
 import com.metrolist.music.lyrics.LyricsUtils.romanizeKorean
 import com.metrolist.music.lyrics.lyricsTextLooksSynced
 import com.metrolist.music.ui.component.shimmer.ShimmerHost
@@ -275,17 +272,8 @@ fun OriginalLyrics(
                             var value: String? = ""
 
                             when {
-                                "Japanese" in enabledLanguages && isJapanese(text) && !isChinese(text) -> {
-                                    value =
-                                        romanizeJapanese(entry.text)
-                                }
-
                                 "Korean" in enabledLanguages && isKorean(text) -> {
                                     value = romanizeKorean(entry.text)
-                                }
-
-                                "Chinese" in enabledLanguages && isChinese(text) -> {
-                                    value = romanizeChinese(entry.text)
                                 }
 
                                 "Hindi" in enabledLanguages && isHindi(text) -> {
@@ -337,9 +325,7 @@ fun OriginalLyrics(
                         var value = newEntry.romanizedTextFlow.value
 
                         when {
-                            "Japanese" in enabledLanguages && isJapanese(text) && !isChinese(text) -> value = romanizeJapanese(line)
                             "Korean" in enabledLanguages && isKorean(text) -> value = romanizeKorean(line)
-                            "Chinese" in enabledLanguages && isChinese(text) -> value = romanizeChinese(line)
                             "Hindi" in enabledLanguages && isHindi(text) -> value = romanizeHindi(line)
                             "Ukrainian" in enabledLanguages && isUkrainian(text) -> value = romanizeCyrillic(line, "Ukrainian")
                             "Russian" in enabledLanguages && isRussian(text) -> value = romanizeCyrillic(line, "Russian")
@@ -554,19 +540,36 @@ fun OriginalLyrics(
         selectedIndices.clear()
     }
 
-    LaunchedEffect(lyrics) {
-        if (lyrics.isNullOrEmpty() || !lyrics.startsWith("[")) {
+    LaunchedEffect(lines) {
+        if (lines.isEmpty()) {
             currentLineIndex = -1
             return@LaunchedEffect
         }
+        var lastPlayerPos = playerConnection.player.currentPosition
+        var lastUpdateTime = System.currentTimeMillis()
         while (isActive) {
-            delay(8) // Faster update for word-by-word animation
-            val sliderPosition = sliderPositionProvider()
-            isSeeking = sliderPosition != null
-            val position = sliderPosition ?: playerConnection.player.currentPosition
-            currentPlaybackPosition = position
-            val lyricsOffset = currentSong?.song?.lyricsOffset ?: 0
-            currentLineIndex = findCurrentLineIndex(lines, position + lyricsOffset)
+            withFrameMillis {
+                val now = System.currentTimeMillis()
+                val sliderPosition = sliderPositionProvider()
+                isSeeking = sliderPosition != null
+                val position = if (isSeeking) {
+                    lastPlayerPos = sliderPosition!!
+                    lastUpdateTime = now
+                    sliderPosition
+                } else {
+                    val isPlaying = playerConnection.player.isPlaying
+                    val playerPos = playerConnection.player.currentPosition
+                    if (playerPos != lastPlayerPos || !isPlaying) {
+                        lastPlayerPos = playerPos
+                        lastUpdateTime = now
+                    }
+                    val elapsed = (now - lastUpdateTime).coerceIn(0L, 100L)
+                    lastPlayerPos + (if (isPlaying) elapsed else 0L)
+                }
+                currentPlaybackPosition = position
+                val lyricsOffset = currentSong?.song?.lyricsOffset ?: 0
+                currentLineIndex = findCurrentLineIndex(lines, position + lyricsOffset)
+            }
         }
     }
 

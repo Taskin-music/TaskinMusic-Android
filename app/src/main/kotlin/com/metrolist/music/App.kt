@@ -75,7 +75,6 @@ class App :
 
         // Install crash handler first
         CrashHandler.install(this)
-        ArtistNameAliases.initialize(this)
 
         // preferencesDataStore uses filesDir/datastore; proactive mkdir reduces failures on odd ROM states
         try {
@@ -93,6 +92,7 @@ class App :
 
         // Pre-read Coil cache size on background to avoid runBlocking in newImageLoader
         applicationScope.launch(Dispatchers.IO) {
+            ArtistNameAliases.initialize(this@App)
             cachedCoilCacheSize = dataStore.data.map { it[MaxImageCacheSizeKey] ?: 512 }.first()
         }
 
@@ -290,25 +290,33 @@ class App :
                         )
                 }
         }
+
+        applicationScope.launch(Dispatchers.IO) {
+            dataStore.data
+                .map { it[MaxImageCacheSizeKey] ?: 512 }
+                .distinctUntilChanged()
+                .collect { cachedCoilCacheSize = it }
+        }
     }
 
     @Volatile
     private var cachedCoilCacheSize: Int? = null
 
     override fun newImageLoader(context: PlatformContext): ImageLoader {
-        val cacheSize = cachedCoilCacheSize ?: runBlocking {
-            dataStore.data.map { it[MaxImageCacheSizeKey] ?: 512 }.first()
-        }
+        val cacheSize = cachedCoilCacheSize ?: 512
         return ImageLoader
             .Builder(this)
             .apply {
-                crossfade(true)
+                components {
+                    add(com.metrolist.music.utils.AudioArtworkFetcher.Factory(this@App))
+                }
+                crossfade(150)
                 allowHardware(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
                 // Memory cache for fast image loading (prevents network requests on recomposition)
                 memoryCache {
                     MemoryCache
                         .Builder()
-                        .maxSizePercent(context, 0.15)
+                        .maxSizePercent(context, 0.25)
                         .build()
                 }
                 if (cacheSize == 0) {

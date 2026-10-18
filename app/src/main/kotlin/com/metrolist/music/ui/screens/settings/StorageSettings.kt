@@ -50,6 +50,7 @@ import com.metrolist.music.LocalDatabase
 import com.metrolist.music.LocalPlayerAwareWindowInsets
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
+import com.metrolist.music.constants.AutoExportToMusicFolderKey
 import com.metrolist.music.constants.EnableSongCacheKey
 import com.metrolist.music.constants.MaxImageCacheSizeKey
 import com.metrolist.music.constants.MaxSongCacheSizeKey
@@ -94,6 +95,10 @@ fun StorageSettings(
     )
     val (enableSongCache, onEnableSongCacheChange) = rememberPreference(
         key = EnableSongCacheKey,
+        defaultValue = true
+    )
+    val (autoExportToMusicFolder, onAutoExportToMusicFolderChange) = rememberPreference(
+        key = AutoExportToMusicFolderKey,
         defaultValue = true
     )
 
@@ -306,6 +311,27 @@ fun StorageSettings(
                         description = {
                             Text(text = Formatter.formatShortFileSize(context, downloadCacheSize))
                         },
+                    ),
+                    Material3SettingsItem(
+                        icon = painterResource(R.drawable.download),
+                        title = { Text(stringResource(R.string.auto_export_to_music_folder)) },
+                        description = { Text(stringResource(R.string.auto_export_to_music_folder_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = autoExportToMusicFolder,
+                                onCheckedChange = onAutoExportToMusicFolderChange,
+                                thumbContent = {
+                                    Icon(
+                                        painter = painterResource(
+                                            id = if (autoExportToMusicFolder) R.drawable.check else R.drawable.close
+                                        ),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                    )
+                                }
+                            )
+                        },
+                        onClick = { onAutoExportToMusicFolderChange(!autoExportToMusicFolder) }
                     ),
                     Material3SettingsItem(
                         icon = painterResource(R.drawable.clear_all),

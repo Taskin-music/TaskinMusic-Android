@@ -28,6 +28,7 @@ import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertubex.extraction.ContentHints
 import com.metrolist.music.constants.AudioQuality
 import com.metrolist.music.constants.AudioQualityKey
+import com.metrolist.music.constants.AutoExportToMusicFolderKey
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.db.entities.AlbumEntity
 import com.metrolist.music.db.entities.FormatEntity
@@ -38,7 +39,10 @@ import com.metrolist.music.di.PlayerCache
 import com.metrolist.music.models.MediaMetadata
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.utils.InnerTubeXPlayer
+import com.metrolist.music.utils.SongExporter
+import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.enumPreference
+import com.metrolist.music.utils.get
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -48,6 +52,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -101,7 +106,7 @@ constructor(
                 .setCacheWriteDataSinkFactory(null)
                 .setUpstreamDataSourceFactory(
                     OkHttpDataSource.Factory(streamHttpClient),
-                ),
+                ).setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR),
         ) { dataSpec ->
             val mediaId = dataSpec.key ?: error("No media id")
             val length = if (dataSpec.length >= 0) dataSpec.length else 1
@@ -119,7 +124,7 @@ constructor(
                 val song = database.songEntity(mediaId)
                 InnerTubeXPlayer.playerResponseForPlayback(
                     mediaId,
-                    audioQuality = audioQuality,
+                    audioQuality = AudioQuality.HIGH,
                     connectivityManager = connectivityManager,
                     contentHints = ContentHints(
                         isExplicit = song?.explicit,
@@ -264,7 +269,24 @@ constructor(
                             when (download.state) {
                                 Download.STATE_COMPLETED -> {
                                     removeFromPlayerCache(download.request.id)
-                                    database.updateDownloadedInfo(download.request.id, true, LocalDateTime.now())
+                                    val now = LocalDateTime.now()
+                                    database.updateDownloadedInfo(download.request.id, true, now)
+                                    database.inLibrary(download.request.id, now)
+                                    if (context.dataStore.get(AutoExportToMusicFolderKey, true)) {
+                                        val exportResult = SongExporter.exportSongToMusicFolder(
+                                            context = context,
+                                            mediaId = download.request.id,
+                                            downloadCache = downloadCache,
+                                            database = database,
+                                        )
+                                        if (exportResult.isSuccess) {
+                                            runCatching {
+                                                downloadCache.removeResource(download.request.id)
+                                                removeFromPlayerCache(download.request.id)
+                                                Timber.tag(TAG).i("Moved ${download.request.id} to Music folder and cleared internal cache")
+                                            }
+                                        }
+                                    }
                                 }
                                 Download.STATE_FAILED,
                                 Download.STATE_STOPPED,
@@ -283,6 +305,7 @@ constructor(
                     ) {
                         val downloadId = download.request.id
                         songUrlCache.invalidate(downloadId)
+                        SongExporter.deleteExportedSong(context, downloadId)
 
                         runCatching {
                             database.updateDownloadedInfo(downloadId, false, null)
@@ -316,7 +339,7 @@ constructor(
         }
     }
 
-    fun getDownload(songId: String): Flow<Download?> = downloads.map { it[songId] }
+    fun getDownload(songId: String): Flow<Download?> = downloads.map { it[songId] }.distinctUntilChanged()
 
     fun download(song: Song) = download(song.toMediaMetadata())
 

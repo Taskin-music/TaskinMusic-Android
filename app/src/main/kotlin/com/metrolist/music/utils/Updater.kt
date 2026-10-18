@@ -39,9 +39,9 @@ object Updater {
     private var cachedAllReleases: List<ReleaseInfo> = emptyList()
     
     private const val CHECK_INTERVAL_MILLIS = 2 * 60 * 60 * 1000L // 2 hours
-    private const val GITHUB_API_BASE = "https://api.github.com/repos/MetrolistGroup/Metrolist"
-    private const val KMP_LATEST_RELEASE_URL = "https://api.github.com/repos/MetrolistGroup/Metrolist-KMP/releases/latest"
-    private const val KMP_APK_NAME = "Metrolist.apk"
+    private const val GITHUB_API_BASE = "https://api.github.com/repos/Taskin-music/TaskinMusic-Android"
+    private const val KMP_LATEST_RELEASE_URL = "https://api.github.com/repos/Taskin-music/TaskinMusic-Android/releases/latest"
+    private const val KMP_APK_NAME = "TaskinMusic.apk"
 
     /**
      * Compares two version strings.
@@ -98,17 +98,15 @@ object Updater {
             
             // Parse architecture and variant from filename
             val (arch, variant) = when {
-                name == "Metrolist.apk" -> "universal" to "foss"
-                name == "Metrolist-with-Google-Cast.apk" -> "universal" to "gms"
-                name.startsWith("app-") && name.endsWith("-release.apk") -> {
-                    val arch = name.removePrefix("app-").removeSuffix("-release.apk")
-                    arch to "foss"
+                name == "TaskinMusic.apk" || name == "Metrolist.apk" -> "universal" to "foss"
+                name.contains("universal", ignoreCase = true) && !name.contains("gms", ignoreCase = true) -> "universal" to "foss"
+                name.contains("Taskin", ignoreCase = true) && !name.contains("gms", ignoreCase = true) -> "universal" to "foss"
+                name.startsWith("app-") && (name.endsWith("-release.apk") || name.endsWith("-debug.apk") || name.endsWith(".apk")) -> {
+                    "universal" to "foss"
                 }
-                name.startsWith("app-") && name.endsWith("-with-Google-Cast.apk") -> {
-                    val arch = name.removePrefix("app-").removeSuffix("-with-Google-Cast.apk")
-                    arch to "gms"
-                }
-                else -> null to null
+                name == "Metrolist-with-Google-Cast.apk" || name == "TaskinMusic-with-Google-Cast.apk" -> "universal" to "gms"
+                name.contains("gms", ignoreCase = true) -> "universal" to "gms"
+                else -> "universal" to "foss"
             }
             
             if (arch != null && variant != null) {
@@ -224,6 +222,7 @@ object Updater {
         return releaseInfo.assets
             .find { it.architecture == currentArch && it.variant == currentVariant }
             ?.downloadUrl
+            ?: releaseInfo.assets.firstOrNull()?.downloadUrl
     }
 
     /**

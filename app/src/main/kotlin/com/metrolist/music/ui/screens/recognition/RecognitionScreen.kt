@@ -37,12 +37,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import android.widget.Toast
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -64,6 +66,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
@@ -80,16 +83,24 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
+import com.metrolist.innertube.YouTube
+import com.metrolist.innertube.models.Artist
+import com.metrolist.innertube.models.SongItem
+import com.metrolist.innertube.models.YTItem
 import com.metrolist.music.LocalDatabase
+import com.metrolist.music.LocalDownloadUtil
 import com.metrolist.music.R
 import com.metrolist.music.db.entities.RecognitionHistory
 import com.metrolist.music.ui.component.IconButton
 import com.metrolist.music.ui.utils.backToMain
 import com.metrolist.music.utils.SearchRoutes
+import com.metrolist.music.utils.SongInstallChecker
 import com.metrolist.shazamkit.models.RecognitionResult
 import com.metrolist.shazamkit.models.RecognitionStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import timber.log.Timber
 import java.time.LocalDateTime
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -491,6 +502,25 @@ private fun SuccessState(
         onSaveToHistory(result)
     }
 
+    val context = LocalContext.current
+    val downloadUtil = LocalDownloadUtil.current
+    val database = LocalDatabase.current
+    val coroutineScope = rememberCoroutineScope()
+    var isDownloading by remember { mutableStateOf(false) }
+
+    val downloads by downloadUtil.downloads.collectAsStateWithLifecycle()
+    val allDbSongs by database.allSongs().collectAsStateWithLifecycle(initialValue = emptyList())
+
+    val isInstalled = remember(result, allDbSongs, downloads) {
+        SongInstallChecker.isInstalled(
+            title = result.title,
+            artist = result.artist,
+            videoId = result.youtubeVideoId,
+            installedSongs = allDbSongs,
+            downloads = downloads,
+        )
+    }
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -545,6 +575,32 @@ private fun SuccessState(
             )
         }
 
+        if (isInstalled) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.offline),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.already_installed),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         // Action buttons - stacked vertically
@@ -563,6 +619,86 @@ private fun SuccessState(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(stringResource(R.string.play_on_app))
+            }
+
+            // Direct download button
+            Button(
+                onClick = {
+                    if (!isDownloading && !isInstalled) {
+                        isDownloading = true
+                        coroutineScope.launch {
+                            try {
+                                val song = withContext(Dispatchers.IO) {
+                                    if (!result.youtubeVideoId.isNullOrBlank()) {
+                                        SongItem(
+                                            id = result.youtubeVideoId,
+                                            title = result.title,
+                                            artists = listOf(Artist(name = result.artist, id = null)),
+                                            album = null,
+                                            duration = null,
+                                            thumbnail = result.coverArtHqUrl ?: result.coverArtUrl ?: "https://i.ytimg.com/vi/${result.youtubeVideoId}/hqdefault.jpg",
+                                        )
+                                    } else {
+                                        val query = "${result.title} ${result.artist}"
+                                        val searchResult = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
+                                        searchResult?.items?.filterIsInstance<SongItem>()?.firstOrNull()
+                                            ?: searchResult?.items?.filterIsInstance<YTItem>()?.firstOrNull()?.let { yt ->
+                                                SongItem(
+                                                    id = yt.id,
+                                                    title = yt.title,
+                                                    artists = listOf(Artist(name = result.artist, id = null)),
+                                                    album = null,
+                                                    duration = null,
+                                                    thumbnail = yt.thumbnail.orEmpty(),
+                                                )
+                                            }
+                                    }
+                                }
+                                if (song != null) {
+                                    downloadUtil.download(song)
+                                    Toast.makeText(
+                                        context,
+                                        "${result.title} - ${context.getString(R.string.download_queued)}",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "${result.title} YouTube Music üzerinde bulunamadı",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                            } catch (e: Exception) {
+                                Timber.e(e, "Failed to download recognized song")
+                            } finally {
+                                isDownloading = false
+                            }
+                        }
+                    }
+                },
+                enabled = !isDownloading && !isInstalled,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .alpha(if (isInstalled) 0.5f else 1f),
+            ) {
+                if (isDownloading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(if (isInstalled) R.drawable.done else R.drawable.download),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    if (isInstalled) stringResource(R.string.already_installed)
+                    else stringResource(R.string.download_song)
+                )
             }
 
             FilledTonalButton(

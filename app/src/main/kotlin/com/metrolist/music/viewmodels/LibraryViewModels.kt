@@ -57,6 +57,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -67,6 +68,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.metrolist.music.db.entities.Song
 import java.time.Duration
 import java.time.LocalDateTime
 import javax.inject.Inject
@@ -75,10 +78,11 @@ import javax.inject.Inject
 class LibrarySongsViewModel
 @Inject
 constructor(
-    @ApplicationContext context: Context,
-    database: MusicDatabase,
+    @ApplicationContext private val context: Context,
+    private val database: MusicDatabase,
     downloadUtil: DownloadUtil,
     private val syncUtils: SyncUtils,
+    private val localMediaScanner: com.metrolist.music.utils.LocalMediaScanner,
 ) : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
@@ -86,9 +90,86 @@ constructor(
         .debounce(300)
         .stateIn(viewModelScope, SharingStarted.Lazily, "")
 
+    private val _isScanning = MutableStateFlow(false)
+    val isScanning = _isScanning.asStateFlow()
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Ensure all downloaded songs appear in the Library tab
+                database.openHelper.writableDatabase.execSQL(
+                    "UPDATE song SET inLibrary = COALESCE(dateDownload, datetime('now')) WHERE isDownloaded = 1 AND inLibrary IS NULL"
+                )
+                // Ensure all local songs from Music folder appear in both Tracks and Library tabs
+                database.openHelper.writableDatabase.execSQL(
+                    "UPDATE song SET isDownloaded = 1, inLibrary = COALESCE(dateDownload, inLibrary, datetime('now')), dateDownload = COALESCE(dateDownload, inLibrary, datetime('now')) WHERE isLocal = 1 AND isDownloaded = 0"
+                )
+                database.openHelper.writableDatabase.execSQL(
+                    "UPDATE song SET isDownloaded = 1, dateDownload = datetime('now') WHERE id LIKE 'clip:%' AND isDownloaded = 0"
+                )
+                // Purge any local duplicate songs ONLY if there is an existing non-local version in library
+                database.openHelper.writableDatabase.execSQL(
+                    """
+                    DELETE FROM song 
+                    WHERE isLocal = 1 
+                      AND EXISTS (
+                          SELECT 1 FROM song s2 
+                          WHERE s2.isLocal = 0 
+                            AND s2.isDownloaded = 1 
+                            AND s2.inLibrary IS NOT NULL
+                            AND LOWER(TRIM(s2.title)) = LOWER(TRIM(song.title))
+                      )
+                    """.trimIndent()
+                )
+            } catch (e: Exception) {
+                timber.log.Timber.w(e, "Error repairing songs or cleaning local duplicates")
+            }
+        }
+    }
+
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
     }
+
+    fun scanLocalMedia(onComplete: ((Int) -> Unit)? = null) {
+        if (_isScanning.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _isScanning.value = true
+            try {
+                val count = localMediaScanner.scan()
+                withContext(Dispatchers.Main) {
+                    onComplete?.invoke(count)
+                }
+            } finally {
+                _isScanning.value = false
+            }
+        }
+    }
+
+    fun songsFlow(filter: SongFilter): Flow<List<Song>> =
+        context.dataStore.data
+            .map {
+                Triple(
+                    it[SongSortTypeKey].toEnum(SongSortType.CREATE_DATE),
+                    (it[SongSortDescendingKey] ?: true),
+                    Pair(it[HideExplicitKey] ?: false, it[HideVideoSongsKey] ?: false)
+                )
+            }.distinctUntilChanged()
+            .flatMapLatest { (sortType, descending, hidePair) ->
+                val (hideExplicit, hideVideoSongs) = hidePair
+                when (filter) {
+                    SongFilter.LIBRARY -> database.songs(sortType, descending).map { it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs) }
+                    SongFilter.LIKED -> database.likedSongs(sortType, descending).map { it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs) }
+                    SongFilter.DOWNLOADED -> database.downloadedSongs(sortType, descending).map { it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs) }
+                    SongFilter.UPLOADED -> database.uploadedSongs(sortType, descending).map { it.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs) }
+                }
+            }
+
+    val downloadedSongs = songsFlow(SongFilter.DOWNLOADED)
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    val likedSongs = songsFlow(SongFilter.LIKED)
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     val allSongs =
         context.dataStore.data

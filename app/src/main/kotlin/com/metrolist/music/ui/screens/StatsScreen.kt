@@ -12,27 +12,46 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import coil3.compose.AsyncImage
+import com.metrolist.music.db.entities.SongWithStats
+import com.metrolist.music.db.entities.Artist as DbArtist
+import com.metrolist.music.db.entities.Album as DbAlbum
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -192,6 +211,7 @@ fun StatsScreen(
     val lazyListState = rememberLazyListState()
     val selectedOption by viewModel.selectedOption.collectAsStateWithLifecycle()
 
+    var statsTab by rememberSaveable { mutableStateOf(0) }
     var showTimeTransfer by rememberSaveable { mutableStateOf(false) }
     var prevOptionOrdinal by rememberSaveable { mutableStateOf<OptionStats?>(null) }
     var prevIndexChips by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -340,12 +360,7 @@ fun StatsScreen(
 
                             OptionStats.CONTINUOUS -> {
                                 listOf(
-                                    StatPeriod.WEEK_1.ordinal to
-                                        pluralStringResource(
-                                            R.plurals.n_week,
-                                            1,
-                                            1,
-                                        ),
+                                    StatPeriod.WEEK_1.ordinal to stringResource(R.string.yearly_stats_title),
                                     StatPeriod.MONTH_1.ordinal to
                                         pluralStringResource(
                                             R.plurals.n_month,
@@ -430,7 +445,40 @@ fun StatsScreen(
             }
 
             if (!isSearching) {
-                item(key = "mostPlayedSongs") {
+                item(key = "statsTabs") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilterChip(
+                            selected = statsTab == 0,
+                            onClick = { statsTab = 0 },
+                            label = { Text(stringResource(R.string.top_songs)) },
+                            leadingIcon = { Text("🏆") },
+                            shape = RoundedCornerShape(16.dp),
+                        )
+                        FilterChip(
+                            selected = statsTab == 1,
+                            onClick = { statsTab = 1 },
+                            label = { Text(stringResource(R.string.top_artists)) },
+                            leadingIcon = { Text("🎤") },
+                            shape = RoundedCornerShape(16.dp),
+                        )
+                        FilterChip(
+                            selected = statsTab == 2,
+                            onClick = { statsTab = 2 },
+                            label = { Text(stringResource(R.string.albums)) },
+                            leadingIcon = { Text("💿") },
+                            shape = RoundedCornerShape(16.dp),
+                        )
+                    }
+                }
+            }
+
+            if (!isSearching && statsTab == 0) {
+                item(key = "mostPlayedSongsHeader") {
                     NavigationTitle(
                         title = "${mostPlayedSongsStats.size} ${stringResource(id = R.string.songs)}",
                         onPlayAllClick =
@@ -448,165 +496,112 @@ fun StatsScreen(
                             },
                         modifier = Modifier.animateItem(),
                     )
+                }
 
-                    LazyRow(
-                        modifier = Modifier.animateItem(),
-                    ) {
-                        itemsIndexed(
-                            items = mostPlayedSongsStats,
-                            key = { index, song -> "${song.id}_$index" },
-                        ) { index, song ->
-                            LocalSongsGrid(
-                                title = "${index + 1}. ${song.title}",
-                                subtitle =
-                                    joinByBullet(
-                                        pluralStringResource(
-                                            R.plurals.n_time,
-                                            song.songCountListened,
-                                            song.songCountListened,
+                itemsIndexed(
+                    items = mostPlayedSongsStats,
+                    key = { index, song -> "stats_top_song_${song.id}_$index" },
+                ) { index, song ->
+                    TopRankedSongItem(
+                        rank = index + 1,
+                        song = song,
+                        isActive = song.id == mediaMetadata?.id,
+                        isPlaying = isPlaying,
+                        onClick = {
+                            if (song.id == mediaMetadata?.id) {
+                                playerConnection.togglePlayPause()
+                            } else {
+                                val targetSong = mostPlayedSongs.find { it.id == song.id }
+                                if (targetSong != null) {
+                                    playerConnection.playQueue(
+                                        YouTubeQueue(
+                                            endpoint = WatchEndpoint(song.id),
+                                            preloadItem = targetSong.toMediaMetadata(),
                                         ),
-                                        makeTimeString(song.timeListened),
-                                    ),
-                                thumbnailUrl = song.thumbnailUrl,
-                                isActive = song.id == mediaMetadata?.id,
-                                isPlaying = isPlaying,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .combinedClickable(
-                                            onClick = {
-                                                if (song.id == mediaMetadata?.id) {
-                                                    playerConnection.togglePlayPause()
-                                                } else {
-                                                    val targetSong = mostPlayedSongs.find { it.id == song.id }
-                                                    if (targetSong != null) {
-                                                        playerConnection.playQueue(
-                                                            YouTubeQueue(
-                                                                endpoint = WatchEndpoint(song.id),
-                                                                preloadItem = targetSong.toMediaMetadata(),
-                                                            ),
-                                                        )
-                                                    }
-                                                }
-                                            },
-                                            onLongClick = {
-                                                val targetSong = mostPlayedSongs.find { it.id == song.id }
-                                                if (targetSong != null) {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                    menuState.show {
-                                                        SongMenu(
-                                                            originalSong = targetSong,
-                                                            onDismiss = menuState::dismiss,
-                                                        )
-                                                    }
-                                                }
-                                            },
-                                        ).animateItem(),
-                            )
-                        }
-                    }
+                                    )
+                                }
+                            }
+                        },
+                        onLongClick = {
+                            val targetSong = mostPlayedSongs.find { it.id == song.id }
+                            if (targetSong != null) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                menuState.show {
+                                    SongMenu(
+                                        originalSong = targetSong,
+                                        onDismiss = menuState::dismiss,
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier.animateItem(),
+                    )
                 }
             }
 
-            if (!isSearching) {
-                item(key = "mostPlayedArtists") {
+            if (!isSearching && statsTab == 1) {
+                item(key = "mostPlayedArtistsHeader") {
                     NavigationTitle(
                         title = "${mostPlayedArtists.size} ${stringResource(id = R.string.artists)}",
                         modifier = Modifier.animateItem(),
                     )
+                }
 
-                    LazyRow(
+                itemsIndexed(
+                    items = mostPlayedArtists,
+                    key = { _, artist -> "stats_top_artist_${artist.id}" },
+                ) { index, artist ->
+                    TopRankedArtistItem(
+                        rank = index + 1,
+                        artist = artist,
+                        onClick = {
+                            navController.navigate("artist/${artist.id}")
+                        },
+                        onLongClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            menuState.show {
+                                ArtistMenu(
+                                    originalArtist = artist,
+                                    coroutineScope = coroutineScope,
+                                    onDismiss = menuState::dismiss,
+                                )
+                            }
+                        },
                         modifier = Modifier.animateItem(),
-                    ) {
-                        itemsIndexed(
-                            items = mostPlayedArtists,
-                            key = { _, artist -> artist.id },
-                        ) { index, artist ->
-                            LocalArtistsGrid(
-                                title = "${index + 1}. ${artist.artist.name}",
-                                subtitle =
-                                    joinByBullet(
-                                        pluralStringResource(
-                                            R.plurals.n_time,
-                                            artist.songCount,
-                                            artist.songCount,
-                                        ),
-                                        makeTimeString(artist.timeListened?.toLong()),
-                                    ),
-                                thumbnailUrl = artist.artist.thumbnailUrl,
-                                modifier =
-                                    Modifier
-                                        .combinedClickable(
-                                            onClick = {
-                                                navController.navigate("artist/${artist.id}")
-                                            },
-                                            onLongClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                menuState.show {
-                                                    ArtistMenu(
-                                                        originalArtist = artist,
-                                                        coroutineScope = coroutineScope,
-                                                        onDismiss = menuState::dismiss,
-                                                    )
-                                                }
-                                            },
-                                        ).animateItem(),
-                            )
-                        }
-                    }
+                    )
                 }
             }
 
-            if (!isSearching) {
-                item(key = "mostPlayedAlbums") {
+            if (!isSearching && statsTab == 2) {
+                item(key = "mostPlayedAlbumsHeader") {
                     NavigationTitle(
                         title = "${mostPlayedAlbums.size} ${stringResource(id = R.string.albums)}",
                         modifier = Modifier.animateItem(),
                     )
+                }
 
-                    if (mostPlayedAlbums.isNotEmpty()) {
-                        LazyRow(
-                            modifier = Modifier.animateItem(),
-                        ) {
-                            itemsIndexed(
-                                items = mostPlayedAlbums,
-                                key = { _, album -> album.id },
-                            ) { index, album ->
-                                LocalAlbumsGrid(
-                                    title = "${index + 1}. ${album.album.title}",
-                                    subtitle =
-                                        joinByBullet(
-                                            pluralStringResource(
-                                                R.plurals.n_time,
-                                                album.songCountListened ?: 0,
-                                                album.songCountListened ?: 0,
-                                            ),
-                                            makeTimeString(album.timeListened),
-                                        ),
-                                    thumbnailUrl = album.album.thumbnailUrl,
-                                    isActive = album.id == mediaMetadata?.album?.id,
-                                    isPlaying = isPlaying,
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .combinedClickable(
-                                                onClick = {
-                                                    navController.navigate("album/${album.id}")
-                                                },
-                                                onLongClick = {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                    menuState.show {
-                                                        AlbumMenu(
-                                                            originalAlbum = album,
-                                                            onDismiss = menuState::dismiss,
-                                                        )
-                                                    }
-                                                },
-                                            ).animateItem(),
+                itemsIndexed(
+                    items = mostPlayedAlbums,
+                    key = { _, album -> "stats_top_album_${album.id}" },
+                ) { index, album ->
+                    TopRankedAlbumItem(
+                        rank = index + 1,
+                        album = album,
+                        isActive = album.id == mediaMetadata?.album?.id,
+                        onClick = {
+                            navController.navigate("album/${album.id}")
+                        },
+                        onLongClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            menuState.show {
+                                AlbumMenu(
+                                    originalAlbum = album,
+                                    onDismiss = menuState::dismiss,
                                 )
                             }
-                        }
-                    }
+                        },
+                        modifier = Modifier.animateItem(),
+                    )
                 }
             }
 
@@ -789,3 +784,215 @@ fun StatsScreen(
 }
 
 enum class OptionStats { WEEKS, MONTHS, YEARS, CONTINUOUS }
+
+@Composable
+private fun RankBadge(rank: Int) {
+    val (bgColor, textColor, text) =
+        when (rank) {
+            1 -> Triple(Color(0xFFFFD700), Color(0xFF4A3800), "1 🥇")
+            2 -> Triple(Color(0xFFC0C0C0), Color(0xFF2E2E2E), "2 🥈")
+            3 -> Triple(Color(0xFFCD7F32), Color(0xFF3E1F00), "3 🥉")
+            else -> Triple(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.onSurfaceVariant, "$rank")
+        }
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = bgColor,
+        modifier = Modifier.width(42.dp).height(28.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = textColor,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TopRankedSongItem(
+    rank: Int,
+    song: SongWithStats,
+    isActive: Boolean,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RankBadge(rank = rank)
+        Spacer(modifier = Modifier.width(12.dp))
+        AsyncImage(
+            model = song.thumbnailUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier =
+                Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(10.dp)),
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = song.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text =
+                    joinByBullet(
+                        pluralStringResource(
+                            R.plurals.n_time,
+                            song.songCountListened,
+                            song.songCountListened,
+                        ),
+                        makeTimeString(song.timeListened),
+                    ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (isActive) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                painter = painterResource(if (isPlaying) R.drawable.volume_up else R.drawable.pause),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TopRankedArtistItem(
+    rank: Int,
+    artist: DbArtist,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RankBadge(rank = rank)
+        Spacer(modifier = Modifier.width(12.dp))
+        AsyncImage(
+            model = artist.artist.thumbnailUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier =
+                Modifier
+                    .size(52.dp)
+                    .clip(CircleShape),
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = artist.artist.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text =
+                    joinByBullet(
+                        pluralStringResource(
+                            R.plurals.n_time,
+                            artist.songCount,
+                            artist.songCount,
+                        ),
+                        makeTimeString(artist.timeListened?.toLong()),
+                    ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TopRankedAlbumItem(
+    rank: Int,
+    album: DbAlbum,
+    isActive: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RankBadge(rank = rank)
+        Spacer(modifier = Modifier.width(12.dp))
+        AsyncImage(
+            model = album.album.thumbnailUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier =
+                Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(10.dp)),
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = album.album.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text =
+                    joinByBullet(
+                        pluralStringResource(
+                            R.plurals.n_time,
+                            album.songCountListened ?: 0,
+                            album.songCountListened ?: 0,
+                        ),
+                        makeTimeString(album.timeListened),
+                    ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}

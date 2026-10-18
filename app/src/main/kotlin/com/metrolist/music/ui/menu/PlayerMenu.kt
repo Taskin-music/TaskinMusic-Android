@@ -94,6 +94,9 @@ import com.metrolist.music.ui.component.BottomSheetState
 import com.metrolist.music.ui.component.ListDialog
 import com.metrolist.music.ui.component.Material3MenuGroup
 import com.metrolist.music.ui.component.Material3MenuItemData
+import com.metrolist.music.ui.component.TrimSongDialog
+import com.metrolist.music.ui.component.FormatConverterDialog
+import com.metrolist.music.ui.component.MergeSongsDialog
 import com.metrolist.music.ui.component.NewAction
 import com.metrolist.music.ui.component.NewActionGrid
 import com.metrolist.music.ui.component.VolumeSlider
@@ -186,6 +189,41 @@ fun PlayerMenu(
         mediaMetadata = mediaMetadata,
         onDismiss = { showListenTogetherDialog = false },
     )
+
+    var showTrimDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    if (showTrimDialog) {
+        TrimSongDialog(
+            mediaMetadata = mediaMetadata,
+            onDismiss = { showTrimDialog = false },
+            onSuccess = { onDismiss() },
+        )
+    }
+
+    var showFormatConverterDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    if (showFormatConverterDialog) {
+        FormatConverterDialog(
+            mediaMetadata = mediaMetadata,
+            onDismiss = { showFormatConverterDialog = false },
+        )
+    }
+
+    var showMergeSongsDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    if (showMergeSongsDialog) {
+        MergeSongsDialog(
+            initialMetadataList = listOf(mediaMetadata),
+            onDismiss = { showMergeSongsDialog = false },
+            onSuccess = { onDismiss() },
+        )
+    }
 
     var showSelectArtistDialog by rememberSaveable {
         mutableStateOf(false)
@@ -483,6 +521,54 @@ fun PlayerMenu(
                                 onClick = {
                                     playerConnection.toggleLibrary()
                                     onDismiss()
+                                },
+                            ),
+                        )
+                        add(
+                            Material3MenuItemData(
+                                title = { Text(text = stringResource(R.string.trim_song)) },
+                                description = { Text(text = stringResource(R.string.trim_song_desc)) },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.content_cut),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                },
+                                onClick = {
+                                    showTrimDialog = true
+                                },
+                            ),
+                        )
+                        add(
+                            Material3MenuItemData(
+                                title = { Text(text = stringResource(R.string.convert_format)) },
+                                description = { Text(text = stringResource(R.string.convert_format_desc)) },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.transform),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                },
+                                onClick = {
+                                    showFormatConverterDialog = true
+                                },
+                            ),
+                        )
+                        add(
+                            Material3MenuItemData(
+                                title = { Text(text = stringResource(R.string.merge_songs)) },
+                                description = { Text(text = stringResource(R.string.merge_songs_desc)) },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.queue_music),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                },
+                                onClick = {
+                                    showMergeSongsDialog = true
                                 },
                             ),
                         )

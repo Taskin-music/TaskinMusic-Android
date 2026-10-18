@@ -125,8 +125,7 @@
 -dontwarn java.beans.Introspector
 -dontwarn java.beans.PropertyDescriptor
 
-# Keep all classes within the kuromoji package
--keep class com.atilika.kuromoji.** { *; }
+
 
 ## Queue Persistence Rules
 # Keep queue-related classes to prevent serialization issues in release builds
@@ -195,3 +194,7 @@
 -keepclasseswithmembers class com.metrolist.shazamkit.models.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
+
+## FFmpegKit and SmartException
+-keep class com.arthenica.ffmpegkit.** { *; }
+-keep class com.arthenica.smartexception.** { *; }

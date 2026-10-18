@@ -1260,6 +1260,9 @@ interface DatabaseDao {
     @Query("UPDATE song SET isDownloaded = :downloaded, dateDownload = :date WHERE id = :songId")
     fun updateDownloadedInfo(songId: String, downloaded: Boolean, date: LocalDateTime?)
 
+    @Query("UPDATE song SET thumbnailUrl = :thumbnailUrl WHERE id = :songId")
+    fun updateSongThumbnail(songId: String, thumbnailUrl: String?)
+
     @Query("UPDATE song SET playbackPosition = :position WHERE id = :songId")
     fun updatePlaybackPosition(songId: String, position: Long?)
 
@@ -1951,6 +1954,12 @@ interface DatabaseDao {
 
     @Delete
     fun delete(song: SongEntity)
+
+    @Query("SELECT * FROM song WHERE isLocal = 1")
+    fun localSongs(): List<SongEntity>
+
+    @Query("DELETE FROM song WHERE id = :songId AND isLocal = 1")
+    fun deleteLocalSongById(songId: String)
 
     @Delete
     fun delete(songArtistMap: SongArtistMap)

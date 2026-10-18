@@ -85,6 +85,7 @@ import coil3.compose.AsyncImage
 import com.metrolist.music.LocalDatabase
 import com.metrolist.music.LocalListenTogetherManager
 import com.metrolist.music.LocalPlayerConnection
+import com.metrolist.music.LocalCropAlbumArt
 import com.metrolist.music.R
 import com.metrolist.music.constants.CropAlbumArtKey
 import com.metrolist.music.constants.DarkModeKey
@@ -465,16 +466,15 @@ private fun NewMiniPlayer(
                     Spacer(modifier = Modifier.width(12.dp))
                 }
 
-// Subscribe button - isolated composable
-                mediaMetadata?.artists?.firstOrNull()?.id?.let { artistId ->
-                    SubscribeButton(
-                        artistId = artistId,
-                        metadata = mediaMetadata!!,
-                        primaryColor = primaryColor,
-                        outlineColor = outlineColor,
-                        onSurfaceColor = onSurfaceColor,
-                    )
-                }
+                // Play / Pause (Durdur/Oynat) button
+                NewMiniPlayerPlayPauseButton(
+                    playerConnection = playerConnection,
+                    playbackState = playbackState,
+                    isCasting = isCasting,
+                    castHandler = castHandler,
+                    listenTogetherManager = listenTogetherManager,
+                    primaryColor = primaryColor,
+                )
 
                 Spacer(modifier = Modifier.width(8.dp))
 
@@ -942,7 +942,7 @@ private fun LegacyMiniMediaInfo(
     modifier: Modifier = Modifier,
 ) {
     val error by LocalPlayerConnection.current?.error?.collectAsState() ?: remember { mutableStateOf(null) }
-    val cropAlbumArt by rememberPreference(CropAlbumArtKey, false)
+    val cropAlbumArt = LocalCropAlbumArt.current
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -1027,6 +1027,54 @@ private fun LegacyMiniMediaInfo(
 // ============================================================================
 // ISOLATED BUTTON COMPOSABLES - Prevent parent recomposition
 // ============================================================================
+
+@Composable
+private fun NewMiniPlayerPlayPauseButton(
+    playerConnection: PlayerConnection,
+    playbackState: Int,
+    isCasting: Boolean,
+    castHandler: CastConnectionHandler?,
+    listenTogetherManager: ListenTogetherManager?,
+    primaryColor: Color,
+) {
+    val isPlaying by playerConnection.isPlaying.collectAsState()
+    val castIsPlaying by castHandler?.castIsPlaying?.collectAsState() ?: remember { mutableStateOf(false) }
+    val effectiveIsPlaying = if (isCasting) castIsPlaying else isPlaying
+    val isListenTogetherGuest = listenTogetherManager?.let { it.isInRoom && !it.isHost } ?: false
+    val isMuted by playerConnection.isMuted.collectAsStateWithLifecycle()
+
+    IconButton(
+        onClick = {
+            if (isListenTogetherGuest) {
+                playerConnection.toggleMute()
+                return@IconButton
+            }
+            if (isCasting) {
+                if (castIsPlaying) castHandler?.pause() else castHandler?.play()
+            } else if (playbackState == Player.STATE_ENDED) {
+                playerConnection.player.seekTo(0, 0)
+                playerConnection.player.playWhenReady = true
+            } else {
+                playerConnection.togglePlayPause()
+            }
+        },
+        modifier = Modifier.size(40.dp),
+    ) {
+        Icon(
+            painter = painterResource(
+                when {
+                    isListenTogetherGuest -> if (isMuted) R.drawable.volume_off else R.drawable.volume_up
+                    playbackState == Player.STATE_ENDED -> R.drawable.replay
+                    effectiveIsPlaying -> R.drawable.pause
+                    else -> R.drawable.play
+                }
+            ),
+            contentDescription = null,
+            tint = primaryColor,
+            modifier = Modifier.size(24.dp),
+        )
+    }
+}
 
 @Composable
 private fun SubscribeButton(

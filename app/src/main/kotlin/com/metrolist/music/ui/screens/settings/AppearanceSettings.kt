@@ -201,7 +201,7 @@ fun AppearanceSettings(
     val (defaultOpenTab, onDefaultOpenTabChange) =
         rememberEnumPreference(
             DefaultOpenTabKey,
-            defaultValue = NavigationTab.HOME,
+            defaultValue = NavigationTab.LIBRARY,
         )
     val (playerButtonsStyle, onPlayerButtonsStyleChange) =
         rememberEnumPreference(
@@ -599,9 +599,9 @@ fun AppearanceSettings(
             values = NavigationTab.values().toList(),
             valueText = {
                 when (it) {
-                    NavigationTab.HOME -> stringResource(R.string.home)
-                    NavigationTab.SEARCH -> stringResource(R.string.search)
                     NavigationTab.LIBRARY -> stringResource(R.string.filter_library)
+                    NavigationTab.SEARCH -> stringResource(R.string.search)
+                    NavigationTab.HOME -> stringResource(R.string.home_explore)
                 }
             },
         )
@@ -1566,9 +1566,9 @@ fun AppearanceSettings(
                         description = {
                             Text(
                                 when (defaultOpenTab) {
-                                    NavigationTab.HOME -> stringResource(R.string.home)
-                                    NavigationTab.SEARCH -> stringResource(R.string.search)
                                     NavigationTab.LIBRARY -> stringResource(R.string.filter_library)
+                                    NavigationTab.SEARCH -> stringResource(R.string.search)
+                                    NavigationTab.HOME -> stringResource(R.string.home_explore)
                                 },
                             )
                         },
@@ -1880,9 +1880,9 @@ enum class DarkMode {
 }
 
 enum class NavigationTab {
-    HOME,
-    SEARCH,
     LIBRARY,
+    SEARCH,
+    HOME,
 }
 
 enum class LyricsPosition {

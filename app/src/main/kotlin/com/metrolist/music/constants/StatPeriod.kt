@@ -77,7 +77,11 @@ fun statToPeriod(
         }
 
         OptionStats.CONTINUOUS -> {
-            val index = if (test >= StatPeriod.entries.size) 0 else test
-            StatPeriod.entries[index].toLocalDateTime()
+            if (test == 0) {
+                java.time.LocalDate.now().atStartOfDay().withDayOfYear(1)
+            } else {
+                val index = if (test >= StatPeriod.entries.size) 0 else test
+                StatPeriod.entries[index].toLocalDateTime()
+            }
         }
     }

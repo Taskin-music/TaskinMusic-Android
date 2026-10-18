@@ -55,7 +55,20 @@ import com.metrolist.music.ui.component.shimmer.ShimmerHost
 import com.metrolist.music.ui.component.shimmer.TextPlaceholder
 import com.metrolist.music.utils.ArtistNameAliases
 import com.metrolist.music.utils.rememberEnumPreference
+import android.media.MediaMetadataRetriever
+import android.net.Uri
+import android.os.Environment
+import android.provider.MediaStore
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.metrolist.music.utils.SongExporter
+import com.metrolist.music.utils.makeTimeString
 import androidx.compose.ui.platform.LocalLocale
+
+import android.os.Build
+import androidx.media3.exoplayer.offline.Download
+import com.metrolist.music.LocalDownloadUtil
 
 @Composable
 fun getLoudnessLevelLabel(loudnessLevel: LoudnessLevel): String {
@@ -86,6 +99,7 @@ fun ShowMediaInfo(videoId: String) {
     val currentStreamClient by playerConnection?.currentStreamClient?.collectAsState() ?: remember { mutableStateOf(null) }
     val context = LocalContext.current
     val artistNameAliases = LocalArtistNameAliases.current
+    val downloadUtil = LocalDownloadUtil.current
 
     val loudnessLevel by rememberEnumPreference(
         LoudnessLevelKey,
@@ -93,6 +107,13 @@ fun ShowMediaInfo(videoId: String) {
     )
 
     val targetLufs: Float = loudnessLevel.targetLufs
+
+    var localFilePath by remember { mutableStateOf<String?>(null) }
+    var localFileSize by remember { mutableStateOf<Long?>(null) }
+    var localMimeType by remember { mutableStateOf<String?>(null) }
+    var localBitrate by remember { mutableStateOf<String?>(null) }
+    var localSampleRate by remember { mutableStateOf<String?>(null) }
+    var storageLocationType by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit, videoId) {
         info = YouTube.getMediaInfo(videoId).getOrNull()
@@ -110,6 +131,221 @@ fun ShowMediaInfo(videoId: String) {
         }
     }
 
+    LaunchedEffect(song, currentFormat, videoId) {
+        withContext(Dispatchers.IO) {
+            val currentSong = song?.song
+            val isLocal = currentSong?.isLocal == true
+            if (isLocal) {
+                storageLocationType = context.getString(R.string.local_storage)
+                val uriStr = currentSong.id
+                localFilePath = uriStr
+                try {
+                    if (uriStr.startsWith("content://")) {
+                        val uri = Uri.parse(uriStr)
+                        context.contentResolver.query(
+                            uri,
+                            arrayOf(
+                                MediaStore.Audio.Media.DATA,
+                                MediaStore.Audio.Media.SIZE,
+                                MediaStore.Audio.Media.MIME_TYPE,
+                            ),
+                            null,
+                            null,
+                            null,
+                        )?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val dataIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+                                if (dataIdx != -1) {
+                                    val path = cursor.getString(dataIdx)
+                                    if (!path.isNullOrBlank()) localFilePath = path
+                                }
+                                val sizeIdx = cursor.getColumnIndex(MediaStore.Audio.Media.SIZE)
+                                if (sizeIdx != -1) {
+                                    localFileSize = cursor.getLong(sizeIdx)
+                                }
+                                val mimeIdx = cursor.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE)
+                                if (mimeIdx != -1) {
+                                    localMimeType = cursor.getString(mimeIdx)
+                                }
+                            }
+                        }
+                    } else if (uriStr.startsWith("file://") || uriStr.startsWith("/")) {
+                        val file = File(uriStr.removePrefix("file://"))
+                        localFilePath = file.absolutePath
+                        if (file.exists()) {
+                            localFileSize = file.length()
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Ignore
+                }
+
+                val retriever = MediaMetadataRetriever()
+                try {
+                    if (uriStr.startsWith("content://")) {
+                        retriever.setDataSource(context, Uri.parse(uriStr))
+                    } else {
+                        retriever.setDataSource(uriStr.removePrefix("file://"))
+                    }
+                    val br = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
+                    if (!br.isNullOrBlank()) {
+                        val brInt = br.toIntOrNull()
+                        localBitrate = if (brInt != null) "${brInt / 1000} Kbps" else "$br bps"
+                    }
+                    val sr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)
+                    if (!sr.isNullOrBlank()) {
+                        localSampleRate = "$sr Hz"
+                    }
+                    val mime = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE)
+                    if (!mime.isNullOrBlank() && localMimeType.isNullOrBlank()) {
+                        localMimeType = mime
+                    }
+                } catch (e: Exception) {
+                    // Ignore
+                } finally {
+                    try { retriever.release() } catch (e: Exception) {}
+                }
+            } else {
+                // 1. Check if exported into Music public directory or MediaStore
+                val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
+                val cleanTitle = currentSong?.title?.replace(Regex("[\\\\/:*?\"<>|]"), "_")?.trim()
+                var exportedFile: File? = null
+
+                if (musicDir.exists() && musicDir.isDirectory && !cleanTitle.isNullOrBlank()) {
+                    val files = musicDir.listFiles()
+                    if (files != null) {
+                        exportedFile = files.firstOrNull { f ->
+                            f.isFile && f.nameWithoutExtension.contains(cleanTitle, ignoreCase = true)
+                        }
+                    }
+                }
+
+                if (exportedFile == null && !cleanTitle.isNullOrBlank()) {
+                    val targetSubDir = SongExporter.getTargetSubdirectory()
+                    val taskinMusicDir = File(musicDir, targetSubDir)
+                    if (taskinMusicDir.exists() && taskinMusicDir.isDirectory) {
+                        exportedFile = taskinMusicDir.listFiles()?.firstOrNull { f ->
+                            f.isFile && f.nameWithoutExtension.contains(cleanTitle, ignoreCase = true)
+                        }
+                    }
+                }
+
+                if (exportedFile == null && !cleanTitle.isNullOrBlank()) {
+                    val legacyDir = File(musicDir, SongExporter.LEGACY_SUBDIRECTORY)
+                    if (legacyDir.exists() && legacyDir.isDirectory) {
+                        exportedFile = legacyDir.listFiles()?.firstOrNull { f ->
+                            f.isFile && f.nameWithoutExtension.contains(cleanTitle, ignoreCase = true)
+                        }
+                    }
+                }
+
+                if (exportedFile == null && !cleanTitle.isNullOrBlank() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    try {
+                        val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+                        val selection = "(${MediaStore.Audio.Media.RELATIVE_PATH} LIKE ? OR ${MediaStore.Audio.Media.RELATIVE_PATH} LIKE ? OR ${MediaStore.Audio.Media.RELATIVE_PATH} LIKE ?) AND (${MediaStore.Audio.Media.DISPLAY_NAME} LIKE ? OR ${MediaStore.Audio.Media.TITLE} LIKE ?)"
+                        val selectionArgs = arrayOf("%${Environment.DIRECTORY_MUSIC}%", "%${SongExporter.SUBDIRECTORY}%", "%${SongExporter.LEGACY_SUBDIRECTORY}%", "%$cleanTitle%", "%$cleanTitle%")
+                        context.contentResolver.query(
+                            collection,
+                            arrayOf(MediaStore.Audio.Media.DATA, MediaStore.Audio.Media.SIZE, MediaStore.Audio.Media.MIME_TYPE),
+                            selection,
+                            selectionArgs,
+                            null
+                        )?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val dataIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+                                if (dataIdx != -1) {
+                                    val path = cursor.getString(dataIdx)
+                                    if (!path.isNullOrBlank()) {
+                                        val f = File(path)
+                                        if (f.exists()) exportedFile = f
+                                    }
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                // 2. Check if downloaded in ExoPlayer download cache or database marked downloaded
+                val downloadSpans = downloadUtil.downloadCache.getCachedSpans(videoId)
+                val isDownloadedInDb = currentSong?.isDownloaded == true
+                val isCompletedDownload = downloadUtil.downloads.value[videoId]?.state == Download.STATE_COMPLETED
+                val isDownloaded = exportedFile != null || downloadSpans.isNotEmpty() || isDownloadedInDb || isCompletedDownload
+
+                // 3. Check if cached in ExoPlayer streaming player cache
+                val playerSpans = if (!isDownloaded) downloadUtil.playerCache.getCachedSpans(videoId) else emptySet()
+
+                val targetExportedFile = exportedFile
+                if (targetExportedFile != null && targetExportedFile.exists()) {
+                    storageLocationType = context.getString(R.string.downloaded_storage)
+                    localFilePath = targetExportedFile.absolutePath
+                    localFileSize = targetExportedFile.length()
+                    localMimeType = when (targetExportedFile.extension.lowercase()) {
+                        "mp3" -> "audio/mpeg (MP3)"
+                        "m4a" -> "audio/mp4 (M4A)"
+                        "opus" -> "audio/opus"
+                        else -> currentFormat?.mimeType ?: "audio/mp4"
+                    }
+                    val retriever = MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(targetExportedFile.absolutePath)
+                        val br = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
+                        if (!br.isNullOrBlank()) {
+                            val brInt = br.toIntOrNull()
+                            localBitrate = if (brInt != null) "${brInt / 1000} Kbps" else "$br bps"
+                        }
+                        val sr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)
+                        if (!sr.isNullOrBlank()) {
+                            localSampleRate = "$sr Hz"
+                        }
+                    } catch (_: Exception) {
+                    } finally {
+                        try { retriever.release() } catch (_: Exception) {}
+                    }
+                } else if (isDownloaded) {
+                    storageLocationType = context.getString(R.string.downloaded_storage)
+                    val firstSpanFile = downloadSpans.firstOrNull { it.file != null && it.file!!.exists() }?.file
+                    localFilePath = firstSpanFile?.absolutePath ?: "${context.filesDir.resolve("download").absolutePath}/$videoId"
+                    val spanSize = downloadSpans.sumOf { it.length }
+                    localFileSize = if (spanSize > 0) spanSize else (firstSpanFile?.length() ?: currentFormat?.contentLength)
+                    localMimeType = currentFormat?.mimeType?.takeIf { it.isNotBlank() } ?: "audio/mp4"
+                    localBitrate = currentFormat?.bitrate?.let { "${it / 1000} Kbps" }
+                    localSampleRate = currentFormat?.sampleRate?.let { "$it Hz" }
+
+                    if (firstSpanFile != null && firstSpanFile.exists()) {
+                        val retriever = MediaMetadataRetriever()
+                        try {
+                            retriever.setDataSource(firstSpanFile.absolutePath)
+                            val br = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
+                            if (!br.isNullOrBlank()) {
+                                val brInt = br.toIntOrNull()
+                                localBitrate = if (brInt != null) "${brInt / 1000} Kbps" else "$br bps"
+                            }
+                            val sr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)
+                            if (!sr.isNullOrBlank()) {
+                                localSampleRate = "$sr Hz"
+                            }
+                        } catch (_: Exception) {
+                        } finally {
+                            try { retriever.release() } catch (_: Exception) {}
+                        }
+                    }
+                } else if (playerSpans.isNotEmpty()) {
+                    storageLocationType = "Çevrim Dışı Önbellek (Taşkın Music)"
+                    val firstPlayerFile = playerSpans.firstOrNull { it.file != null && it.file!!.exists() }?.file
+                    localFilePath = firstPlayerFile?.absolutePath ?: "${context.filesDir.resolve("exoplayer").absolutePath}/$videoId"
+                    val pSize = playerSpans.sumOf { it.length }
+                    localFileSize = if (pSize > 0) pSize else currentFormat?.contentLength
+                    localMimeType = currentFormat?.mimeType?.takeIf { it.isNotBlank() } ?: "audio/mp4"
+                    localBitrate = currentFormat?.bitrate?.let { "${it / 1000} Kbps" }
+                    localSampleRate = currentFormat?.sampleRate?.let { "$it Hz" }
+                } else {
+                    storageLocationType = context.getString(R.string.online_stream)
+                    localFilePath = "https://music.youtube.com/watch?v=$videoId"
+                }
+            }
+        }
+    }
+
     LazyColumn(
         state = rememberLazyListState(),
         modifier = Modifier
@@ -120,7 +356,7 @@ fun ShowMediaInfo(videoId: String) {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        if (info != null) {
+        if (info != null || song != null) {
             item(contentType = "MediaDetails") {
                 Column {
                     val baseList = listOf(
@@ -187,7 +423,31 @@ fun ShowMediaInfo(videoId: String) {
                         emptyList()
                     }
 
+                    val fileDetailsItems = listOfNotNull(
+                        stringResource(R.string.file_location) to (storageLocationType ?: stringResource(R.string.online_stream)),
+                        stringResource(R.string.file_path) to localFilePath,
+                        stringResource(R.string.file_format) to (localMimeType ?: currentFormat?.mimeType ?: currentFormat?.codecs),
+                        stringResource(R.string.bitrate) to (localBitrate ?: currentFormat?.bitrate?.let { "${it / 1000} Kbps" }),
+                        stringResource(R.string.sample_rate) to (localSampleRate ?: currentFormat?.sampleRate?.let { "$it Hz" }),
+                        stringResource(R.string.file_size) to (
+                            localFileSize?.let { Formatter.formatShortFileSize(context, it) }
+                                ?: currentFormat?.contentLength?.let { Formatter.formatShortFileSize(context, it) }
+                        ),
+                        stringResource(R.string.duration) to (song?.song?.duration?.let { makeTimeString(it.toLong()) } ?: stringResource(R.string.unknown)),
+                    )
+
+                    val fileIconsList = listOf(
+                        R.drawable.storage,
+                        R.drawable.location_on,
+                        R.drawable.music_note,
+                        R.drawable.speed,
+                        R.drawable.radio,
+                        R.drawable.download,
+                        R.drawable.timer,
+                    )
+
                     val cardsBaseList = mutableListOf<Material3SettingsItem>()
+                    val cardsFileDetailsList = mutableListOf<Material3SettingsItem>()
                     val cardsExtendedList = mutableListOf<Material3SettingsItem>()
                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
@@ -197,6 +457,19 @@ fun ShowMediaInfo(videoId: String) {
                             title = { Text(label) },
                             description = { Text(displayText) },
                             icon = painterResource(baseIconsList[index]),
+                            onClick = {
+                                cm.setPrimaryClip(ClipData.newPlainText("text", displayText))
+                                Toast.makeText(context, R.string.copied, Toast.LENGTH_SHORT).show()
+                            },
+                        )
+                    }
+
+                    fileDetailsItems.forEachIndexed { index, (label, text) ->
+                        val displayText = text ?: stringResource(R.string.unknown)
+                        cardsFileDetailsList += Material3SettingsItem(
+                            title = { Text(label) },
+                            description = { Text(displayText) },
+                            icon = painterResource(fileIconsList.getOrElse(index) { R.drawable.info }),
                             onClick = {
                                 cm.setPrimaryClip(ClipData.newPlainText("text", displayText))
                                 Toast.makeText(context, R.string.copied, Toast.LENGTH_SHORT).show()
@@ -225,27 +498,38 @@ fun ShowMediaInfo(videoId: String) {
                     Spacer(Modifier.height(8.dp))
 
                     Material3SettingsGroup(
-                        title = stringResource(R.string.information),
-                        items = cardsExtendedList
+                        title = stringResource(R.string.file_details),
+                        items = cardsFileDetailsList
                     )
 
-                    Spacer(Modifier.height(8.dp))
+                    if (cardsExtendedList.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
 
-                    val descriptionText = info?.description ?: stringResource(R.string.unknown)
+                        Material3SettingsGroup(
+                            title = stringResource(R.string.information),
+                            items = cardsExtendedList
+                        )
+                    }
 
-                    Material3SettingsGroup(
-                        title = stringResource(R.string.description),
-                        items = listOf(
-                            Material3SettingsItem(
-                                title = { Text(stringResource(R.string.description)) },
-                                description = { Text(descriptionText) },
-                                onClick = {
-                                    cm.setPrimaryClip(ClipData.newPlainText("text", descriptionText))
-                                    Toast.makeText(context, R.string.copied, Toast.LENGTH_SHORT).show()
-                                }
+                    if (!info?.description.isNullOrBlank()) {
+                        Spacer(Modifier.height(8.dp))
+
+                        val descriptionText = info?.description ?: stringResource(R.string.unknown)
+
+                        Material3SettingsGroup(
+                            title = stringResource(R.string.description),
+                            items = listOf(
+                                Material3SettingsItem(
+                                    title = { Text(stringResource(R.string.description)) },
+                                    description = { Text(descriptionText) },
+                                    onClick = {
+                                        cm.setPrimaryClip(ClipData.newPlainText("text", descriptionText))
+                                        Toast.makeText(context, R.string.copied, Toast.LENGTH_SHORT).show()
+                                    }
+                                )
                             )
                         )
-                    )
+                    }
                 }
             }
         } else {

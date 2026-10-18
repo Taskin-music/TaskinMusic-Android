@@ -11,6 +11,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import com.metrolist.innertube.YouTube
+import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.models.WatchEndpoint
 import com.metrolist.music.constants.ListenTogetherSyncVolumeKey
 import com.metrolist.music.extensions.currentMetadata
@@ -1549,9 +1550,31 @@ class ListenTogetherManager
                         return@launch
                     }
 
+                    // Resolve local track ID to YouTube if necessary
+                    val resolvedTrack = if (currentTrack.id.startsWith("content://") || currentTrack.id.startsWith("file://")) {
+                        val query = "${currentTrack.title} ${currentTrack.artist}".trim()
+                        val onlineResult = withContext(Dispatchers.IO) {
+                            runCatching {
+                                YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
+                            }.getOrNull()
+                        }
+                        val songItem = onlineResult?.items?.filterIsInstance<SongItem>()?.firstOrNull()
+                        if (songItem != null) {
+                            TrackInfo(
+                                id = songItem.id,
+                                title = currentTrack.title,
+                                artist = currentTrack.artist,
+                                album = currentTrack.album,
+                                duration = currentTrack.duration,
+                                thumbnail = songItem.thumbnail ?: currentTrack.thumbnail,
+                                suggestedBy = currentTrack.suggestedBy,
+                            )
+                        } else currentTrack
+                    } else currentTrack
+
                     // Apply queue/media (same)
                     val mediaItems =
-                        canonicalPlaybackQueue(currentTrack, queue.orEmpty())
+                        canonicalPlaybackQueue(resolvedTrack, queue.orEmpty())
                             .map { it.toMediaMetadata().toMediaItem() }
                     player.setMediaItems(mediaItems, 0, initialPosition)
 
@@ -1642,11 +1665,19 @@ class ListenTogetherManager
                             return@launch
                         }
 
+                        val resolvedTrackId = if (track.id.startsWith("content://") || track.id.startsWith("file://")) {
+                            val query = "${track.title} ${track.artist}".trim()
+                            val searchResult = runCatching {
+                                YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
+                            }.getOrNull()
+                            searchResult?.items?.filterIsInstance<SongItem>()?.firstOrNull()?.id ?: track.id
+                        } else track.id
+
                         // Use YouTube API to play the track by ID
                         YouTube
-                            .queue(listOf(track.id))
+                            .queue(listOf(resolvedTrackId))
                             .onSuccess { queue ->
-                                Timber.tag(TAG).d("Got queue for track ${track.id}")
+                                Timber.tag(TAG).d("Got queue for track $resolvedTrackId")
                                 launch(Dispatchers.Main) {
                                     // Final generation check before applying changes
                                     if (currentTrackGeneration != generation) {
@@ -1654,7 +1685,7 @@ class ListenTogetherManager
                                             .tag(
                                                 TAG,
                                             ).d(
-                                                "Skipping stale track application for ${track.id} (generation $generation vs $currentTrackGeneration)",
+                                                "Skipping stale track application for $resolvedTrackId (generation $generation vs $currentTrackGeneration)",
                                             )
                                         isSyncing = false
                                         return@launch
@@ -1674,7 +1705,7 @@ class ListenTogetherManager
                                     connection.allowInternalSync = true
                                     connection.playQueue(
                                         YouTubeQueue(
-                                            endpoint = WatchEndpoint(videoId = track.id),
+                                            endpoint = WatchEndpoint(videoId = resolvedTrackId),
                                             preloadItem = queue.firstOrNull()?.toMediaMetadata(),
                                         ),
                                     )

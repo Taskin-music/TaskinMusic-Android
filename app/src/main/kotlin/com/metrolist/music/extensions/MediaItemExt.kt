@@ -24,13 +24,29 @@ fun Song.toMediaItem() = toMediaMetadata().toMediaItem()
 
 fun SongItem.toMediaItem() = toMediaMetadata().toMediaItem()
 
+data class ClipInfo(val originalId: String, val startMs: Long, val endMs: Long)
+
+fun parseClipId(id: String): ClipInfo? {
+    if (!id.startsWith("clip:")) return null
+    val lastColon = id.lastIndexOf(':')
+    if (lastColon <= 5) return null
+    val secondLastColon = id.lastIndexOf(':', lastColon - 1)
+    if (secondLastColon <= 5) return null
+    val originalId = id.substring(5, secondLastColon)
+    val startMs = id.substring(secondLastColon + 1, lastColon).toLongOrNull() ?: return null
+    val endMs = id.substring(lastColon + 1).toLongOrNull() ?: return null
+    return ClipInfo(originalId, startMs, endMs)
+}
+
 fun MediaMetadata.toMediaItem(): MediaItem {
     val resolvedMetadata = withResolvedArtistNameAliases()
     val artistNames = resolvedMetadata.artists.joinToString { it.name }
-    return MediaItem.Builder()
+    val clipInfo = parseClipId(resolvedMetadata.id)
+    val baseUri = clipInfo?.originalId ?: resolvedMetadata.id
+    val builder = MediaItem.Builder()
         .setMediaId(resolvedMetadata.id)
-        .setUri(resolvedMetadata.id)
-        .setCustomCacheKey(resolvedMetadata.id)
+        .setUri(baseUri)
+        .setCustomCacheKey(baseUri)
         .setTag(resolvedMetadata)
         .setMediaMetadata(
             androidx.media3.common.MediaMetadata.Builder()
@@ -49,7 +65,18 @@ fun MediaMetadata.toMediaItem(): MediaItem {
                     if (resolvedMetadata.explicit) putLong(EXTRAS_KEY_IS_EXPLICIT, EXTRAS_VALUE_ATTRIBUTE_PRESENT)
                 })
                 .build(),
-        ).build()
+        )
+
+    if (clipInfo != null) {
+        builder.setClippingConfiguration(
+            MediaItem.ClippingConfiguration.Builder()
+                .setStartPositionMs(clipInfo.startMs)
+                .setEndPositionMs(clipInfo.endMs)
+                .build()
+        )
+    }
+
+    return builder.build()
 }
 
 fun MediaMetadata.withResolvedArtistNameAliases(): MediaMetadata {

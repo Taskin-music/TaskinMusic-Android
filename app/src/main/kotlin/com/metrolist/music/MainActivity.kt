@@ -30,6 +30,8 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -133,6 +135,11 @@ import coil3.toBitmap
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.models.WatchEndpoint
+import com.metrolist.music.constants.CropAlbumArtKey
+import com.metrolist.music.constants.SwipeToSongKey
+import com.metrolist.music.constants.GridItemsSizeKey
+import com.metrolist.music.constants.GridItemSize
+import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.constants.AppBarHeight
 import com.metrolist.music.constants.AppLanguageKey
 import com.metrolist.music.constants.CheckForUpdatesKey
@@ -173,6 +180,7 @@ import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.db.entities.SearchHistory
 import com.metrolist.music.extensions.toEnum
 import com.metrolist.music.lyrics.LyricsProviderRegistry
+import com.metrolist.music.models.MediaMetadata
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.playback.DownloadUtil
 import com.metrolist.music.playback.MusicService
@@ -182,6 +190,8 @@ import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.ui.component.AccountSettingsDialog
 import com.metrolist.music.ui.component.AppNavigationBar
 import com.metrolist.music.ui.component.AppNavigationRail
+import com.metrolist.music.ui.component.FamilyWelcomeSplash
+import com.metrolist.music.utils.FamilyDeviceManager
 import com.metrolist.music.ui.component.BottomSheetMenu
 import com.metrolist.music.ui.component.BottomSheetPage
 import com.metrolist.music.ui.component.LocalBottomSheetPageState
@@ -258,9 +268,6 @@ class MainActivity : FragmentActivity() {
     @Inject
     lateinit var syncUtils: SyncUtils
 
-    @Inject
-    lateinit var listenTogetherManager: com.metrolist.music.listentogether.ListenTogetherManager
-
     private lateinit var navController: NavHostController
     private var pendingIntent: Intent? = null
     private var latestVersionName by mutableStateOf(BuildConfig.BASE_VERSION_NAME)
@@ -283,13 +290,10 @@ class MainActivity : FragmentActivity() {
                 if (service is MusicBinder) {
                     playerConnection = PlayerConnection(this@MainActivity, service, database, lifecycleScope)
                     playerConnectionSnapshot = playerConnection
-                    listenTogetherManager.setPlayerConnection(playerConnection)
                 }
             }
 
             override fun onServiceDisconnected(name: ComponentName?) {
-                // Disconnect Listen Together manager
-                listenTogetherManager.setPlayerConnection(null)
                 playerConnection?.dispose()
                 // DO NOT null out playerConnection here - keep it for when service reconnects
                 // DO NOT update playerConnectionSnapshot - this is the key to preventing recomposition
@@ -304,7 +308,6 @@ class MainActivity : FragmentActivity() {
             Timber.tag("MainActivity").w(e, "Service was not bound when attempting to unbind in $source")
         } finally {
             isServiceBound = false
-            listenTogetherManager.setPlayerConnection(null)
             playerConnection?.dispose()
             // DO NOT null out playerConnection here - keep it for reconnection
             // DO NOT update playerConnectionSnapshot - this prevents UI recomposition
@@ -360,9 +363,6 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
-        if (isFinishing) {
-            listenTogetherManager.disconnect()
-        }
         super.onDestroy()
         val stopServiceOnClear = dataStore.get(StopMusicOnTaskClearKey, false) && isFinishing
 
@@ -395,9 +395,6 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         window.decorView.layoutDirection = View.LAYOUT_DIRECTION_LTR
         WindowCompat.setDecorFitsSystemWindows(window, false)
-
-        // Initialize Listen Together manager
-        listenTogetherManager.initialize()
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             val locale =
@@ -491,81 +488,6 @@ class MainActivity : FragmentActivity() {
         downloadUtil: DownloadUtil,
         syncUtils: SyncUtils,
     ) {
-        val checkForUpdates by rememberPreference(CheckForUpdatesKey, defaultValue = true)
-        var availableUpdate by remember { mutableStateOf<AvailableUpdate?>(null) }
-
-        if (BuildConfig.UPDATER_AVAILABLE) {
-            LaunchedEffect(checkForUpdates) {
-                if (checkForUpdates) {
-                    val preferences = dataStore.data.first()
-                    val notificationsEnabled = preferences[UpdateNotificationsEnabledKey] ?: true
-                    val (releaseInfo, hasUpdate) = Updater.checkForUpdate().getOrNull() ?: (null to false)
-                    releaseInfo?.let { onLatestVersionNameChange(it.versionName) }
-
-                    val standaloneUpdate =
-                        releaseInfo
-                            ?.takeIf { hasUpdate }
-                            ?.let { release ->
-                                Updater.getDownloadUrlForCurrentVariant(release)?.let { downloadUrl ->
-                                    AvailableUpdate(release, downloadUrl, isKmp = false)
-                                }
-                            }
-                    val kmpUpdate =
-                        Updater.getLatestKmpRelease().getOrNull()?.let { release ->
-                            release.assets.firstOrNull()?.let { asset ->
-                                AvailableUpdate(release, asset.downloadUrl, isKmp = true)
-                            }
-                        }
-                    val update = kmpUpdate ?: standaloneUpdate
-                    availableUpdate = update?.takeUnless {
-                        it.release.tagName == preferences[it.dismissalKey]
-                    }
-
-                    if (update != null && notificationsEnabled) {
-                        val intent = Intent(Intent.ACTION_VIEW, update.downloadUrl.toUri())
-                        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                        val pending = PendingIntent.getActivity(this@MainActivity, 1001, intent, flags)
-                        val notificationText =
-                            if (update.isKmp) {
-                                getString(R.string.kmp_upgrade_warning)
-                            } else {
-                                update.release.versionName
-                            }
-                        val notification =
-                            NotificationCompat
-                                .Builder(this@MainActivity, "updates")
-                                .setSmallIcon(R.drawable.update)
-                                .setContentTitle(
-                                    if (update.isKmp) {
-                                        getString(R.string.kmp_upgrade_title, update.release.versionName)
-                                    } else {
-                                        getString(R.string.update_available_title)
-                                    },
-                                )
-                                .setContentText(notificationText)
-                                .apply {
-                                    if (update.isKmp) {
-                                        setStyle(NotificationCompat.BigTextStyle().bigText(notificationText))
-                                    }
-                                }
-                                .setContentIntent(pending)
-                                .setAutoCancel(true)
-                                .build()
-
-                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                            ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) ==
-                            PackageManager.PERMISSION_GRANTED
-                        ) {
-                            NotificationManagerCompat.from(this@MainActivity).notify(1001, notification)
-                        }
-                    }
-                } else {
-                    onLatestVersionNameChange(BuildConfig.BASE_VERSION_NAME)
-                    availableUpdate = null
-                }
-            }
-        }
-
         val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = true)
         val enableHighRefreshRate by rememberPreference(EnableHighRefreshRateKey, defaultValue = true)
 
@@ -573,23 +495,34 @@ class MainActivity : FragmentActivity() {
             val window = this@MainActivity.window
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val layoutParams = window.attributes
+                val display = this@MainActivity.display ?: @Suppress("DEPRECATION") window.windowManager.defaultDisplay
+                val modes = display?.supportedModes ?: emptyArray()
                 if (enableHighRefreshRate) {
-                    layoutParams.preferredDisplayModeId = 0
+                    val maxMode = modes.maxByOrNull { it.refreshRate }
+                    if (maxMode != null) {
+                        layoutParams.preferredDisplayModeId = maxMode.modeId
+                        @Suppress("DEPRECATION")
+                        layoutParams.preferredRefreshRate = maxMode.refreshRate
+                    }
                 } else {
-                    val modes = window.windowManager.defaultDisplay.supportedModes
                     val mode60 =
                         modes.firstOrNull { kotlin.math.abs(it.refreshRate - 60f) < 1f }
                             ?: modes.minByOrNull { kotlin.math.abs(it.refreshRate - 60f) }
 
                     if (mode60 != null) {
                         layoutParams.preferredDisplayModeId = mode60.modeId
+                        @Suppress("DEPRECATION")
+                        layoutParams.preferredRefreshRate = mode60.refreshRate
                     }
                 }
                 window.attributes = layoutParams
             } else {
                 val params = window.attributes
+                @Suppress("DEPRECATION")
+                val modes = window.windowManager.defaultDisplay.supportedModes
                 if (enableHighRefreshRate) {
-                    params.preferredRefreshRate = 0f
+                    val maxRate = modes.maxOfOrNull { it.refreshRate } ?: 120f
+                    params.preferredRefreshRate = maxRate
                 } else {
                     params.preferredRefreshRate = 60f
                 }
@@ -597,7 +530,7 @@ class MainActivity : FragmentActivity() {
             }
         }
 
-        val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
+        val (darkTheme, onDarkModeChange) = rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
         val isSystemInDarkTheme = isSystemInDarkTheme()
         val useDarkTheme =
             remember(darkTheme, isSystemInDarkTheme) {
@@ -623,6 +556,32 @@ class MainActivity : FragmentActivity() {
 
         var themeColor by rememberSaveable(stateSaver = ColorSaver) {
             mutableStateOf(selectedThemeColor)
+        }
+
+        // Hardware-accelerated, ultra-smooth gradient background (Zero lag)
+        val appBackgroundBrush = remember(useDarkTheme, themeColor, pureBlack) {
+            if (useDarkTheme) {
+                if (pureBlack) {
+                    Brush.verticalGradient(listOf(Color.Black, Color.Black))
+                } else {
+                    Brush.verticalGradient(
+                        listOf(
+                            themeColor.copy(alpha = 0.16f).compositeOver(Color(0xFF131722)),
+                            Color(0xFF0F1118),
+                            Color(0xFF08090E),
+                        ),
+                    )
+                }
+            } else {
+                // High-end, stunning Light Mode gradient with soft pastel ambient morning glow
+                Brush.verticalGradient(
+                    listOf(
+                        themeColor.copy(alpha = 0.12f).compositeOver(Color(0xFFEFF3FA)),
+                        Color(0xFFF6F8FC),
+                        Color(0xFFFFFFFF),
+                    ),
+                )
+            }
         }
 
         val themeColorCache = remember { mutableMapOf<String, Color>() }
@@ -714,7 +673,7 @@ class MainActivity : FragmentActivity() {
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .background(if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface),
+                        .background(appBackgroundBrush),
             ) {
                 val density = LocalDensity.current
                 val configuration = LocalWindowInfo.current
@@ -724,6 +683,8 @@ class MainActivity : FragmentActivity() {
                 val bottomInsetDp = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()
 
                 val navController = rememberNavController()
+                val familyMemberName = remember { FamilyDeviceManager.getFamilyMemberName() }
+                var showWelcomeSplash by rememberSaveable { mutableStateOf(familyMemberName != null) }
 
                 LaunchedEffect(Unit) {
                     val lastSeenVersion = dataStore.data.first()[LastSeenVersionKey] ?: ""
@@ -736,29 +697,21 @@ class MainActivity : FragmentActivity() {
                 val homeViewModel: HomeViewModel = hiltViewModel()
                 val accountImageUrl by homeViewModel.accountImageUrl.collectAsStateWithLifecycle()
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val (previousTab, setPreviousTab) = rememberSaveable { mutableStateOf("home") }
+                val (previousTab, setPreviousTab) = rememberSaveable { mutableStateOf("library") }
 
-                val (listenTogetherInTopBar) = rememberPreference(ListenTogetherInTopBarKey, defaultValue = true)
-                val navigationItems =
-                    remember(listenTogetherInTopBar) {
-                        if (listenTogetherInTopBar) {
-                            Screens.MainScreens.filter { it != Screens.ListenTogether }
-                        } else {
-                            Screens.MainScreens
-                        }
-                    }
+                val navigationItems = remember { Screens.MainScreens }
                 val routeIndexMap = remember(navigationItems) {
                     navigationItems.mapIndexed { i, s -> s.route to i }.toMap()
                 }
                 val (forceBottomNav) = rememberPreference(ForceBottomNavBarKey, defaultValue = false)
                 val (slimNav) = rememberPreference(SlimNavBarKey, defaultValue = false)
                 val (useNewMiniPlayerDesign) = rememberPreference(UseNewMiniPlayerDesignKey, defaultValue = true)
-                val (defaultOpenTabInt) = rememberPreference(DefaultOpenTabKey, defaultValue = NavigationTab.HOME.name)
+                val (defaultOpenTabInt) = rememberPreference(DefaultOpenTabKey, defaultValue = NavigationTab.LIBRARY.name)
                 val defaultOpenTab = remember(defaultOpenTabInt) {
                     try {
                         NavigationTab.valueOf(defaultOpenTabInt)
                     } catch (_: IllegalArgumentException) {
-                        NavigationTab.HOME
+                        NavigationTab.LIBRARY
                     }
                 }
                 val tabOpenedFromShortcut =
@@ -775,7 +728,6 @@ class MainActivity : FragmentActivity() {
                         listOf(
                             Screens.Home.route,
                             Screens.Library.route,
-                            Screens.ListenTogether.route,
                             "settings",
                         )
                     }
@@ -876,13 +828,6 @@ class MainActivity : FragmentActivity() {
                             .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
                             .add(WindowInsets(top = AppBarHeight, bottom = bottom))
                     }
-                appBarScrollBehavior(
-                    canScroll = {
-                        !inSearchScreen &&
-                            (playerBottomSheetState.isCollapsed || playerBottomSheetState.isDismissed)
-                    },
-                )
-
                 val topAppBarScrollBehavior =
                     appBarScrollBehavior(
                         canScroll = {
@@ -969,14 +914,10 @@ class MainActivity : FragmentActivity() {
 
                 var shouldShowTopBar by rememberSaveable { mutableStateOf(false) }
 
-                LaunchedEffect(navBackStackEntry, listenTogetherInTopBar) {
+                LaunchedEffect(navBackStackEntry) {
                     val currentRoute = navBackStackEntry?.destination?.route
-                    val isListenTogetherScreen =
-                        currentRoute == Screens.ListenTogether.route ||
-                            currentRoute == "listen_together_from_topbar"
                     shouldShowTopBar = currentRoute in topLevelScreens &&
-                        currentRoute != "settings" &&
-                        !(isListenTogetherScreen && listenTogetherInTopBar)
+                        currentRoute != "settings"
                 }
 
                 val coroutineScope = rememberCoroutineScope()
@@ -1013,10 +954,9 @@ class MainActivity : FragmentActivity() {
                 val currentTitleRes =
                     remember(navBackStackEntry) {
                         when (navBackStackEntry?.destination?.route) {
-                            Screens.Home.route -> R.string.home
+                            Screens.Home.route -> R.string.home_explore
                             Screens.Search.route -> R.string.search
                             Screens.Library.route -> R.string.filter_library
-                            Screens.ListenTogether.route -> R.string.together
                             else -> null
                         }
                     }
@@ -1024,14 +964,19 @@ class MainActivity : FragmentActivity() {
                 var showAccountDialog by remember { mutableStateOf(false) }
 
                 val pauseListenHistory by rememberPreference(PauseListenHistoryKey, defaultValue = false)
-                val eventCount by database.eventCount().collectAsStateWithLifecycle(initialValue = 0)
+                val hasEvents by remember {
+                    database.eventCount().map { it > 0 }.distinctUntilChanged()
+                }.collectAsStateWithLifecycle(initialValue = true)
                 val showHistoryButton =
-                    remember(pauseListenHistory, eventCount) {
-                        !(pauseListenHistory && eventCount == 0)
+                    remember(pauseListenHistory, hasEvents) {
+                        !(pauseListenHistory && !hasEvents)
                     }
 
                 val baseBg = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainer
                 val artistNameAliases by ArtistNameAliases.aliases.collectAsStateWithLifecycle()
+                val cropAlbumArt by rememberPreference(CropAlbumArtKey, false)
+                val swipeToSong by rememberPreference(SwipeToSongKey, false)
+                val gridItemSize by rememberEnumPreference(GridItemsSizeKey, GridItemSize.BIG)
 
                 CompositionLocalProvider(
                     LocalDatabase provides database,
@@ -1042,15 +987,19 @@ class MainActivity : FragmentActivity() {
                     LocalDownloadUtil provides downloadUtil,
                     LocalShimmerTheme provides ShimmerTheme,
                     LocalSyncUtils provides syncUtils,
-                    LocalListenTogetherManager provides listenTogetherManager,
+                    LocalListenTogetherManager provides null,
                     LocalChangelogState provides showChangelog,
                     LocalArtistNameAliases provides artistNameAliases,
+                    LocalCropAlbumArt provides cropAlbumArt,
+                    LocalSwipeToSong provides swipeToSong,
+                    LocalGridItemSize provides gridItemSize,
                 ) {
                     if (showChangelog.value) {
                         ChangelogScreen(onDismiss = { showChangelog.value = false })
                     }
 
                     Scaffold(
+                        containerColor = Color.Transparent,
                         snackbarHost = { SnackbarHost(snackbarHostState) },
                         topBar = {
                             AnimatedVisibility(
@@ -1067,6 +1016,22 @@ class MainActivity : FragmentActivity() {
                                             )
                                         },
                                         actions = {
+                                            IconButton(
+                                                onClick = {
+                                                    onDarkModeChange(if (useDarkTheme) DarkMode.OFF else DarkMode.ON)
+                                                },
+                                            ) {
+                                                Icon(
+                                                    painter = painterResource(if (useDarkTheme) R.drawable.light_mode else R.drawable.bedtime),
+                                                    contentDescription = stringResource(if (useDarkTheme) R.string.cd_light_mode else R.string.cd_dark_mode),
+                                                )
+                                            }
+                                            IconButton(onClick = { navController.navigate("recognition") }) {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.mic),
+                                                    contentDescription = stringResource(R.string.recognize_music),
+                                                )
+                                            }
                                             if (showHistoryButton) {
                                                 IconButton(onClick = { navController.navigate("history") }) {
                                                     Icon(
@@ -1081,44 +1046,20 @@ class MainActivity : FragmentActivity() {
                                                     contentDescription = stringResource(R.string.stats),
                                                 )
                                             }
-                                            if (listenTogetherInTopBar) {
-                                                IconButton(onClick = { navController.navigate("listen_together_from_topbar") }) {
-                                                    Icon(
-                                                        painter = painterResource(R.drawable.group_outlined),
-                                                        contentDescription = stringResource(R.string.together),
-                                                    )
-                                                }
+                                            IconButton(onClick = { navController.navigate("settings") }) {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.settings),
+                                                    contentDescription = stringResource(R.string.settings),
+                                                )
                                             }
-                                            IconButton(onClick = { showAccountDialog = true }) {
-                                                BadgedBox(badge = {
-                                                    if (latestVersionName != BuildConfig.BASE_VERSION_NAME) {
-                                                        Badge()
-                                                    }
-                                                }) {
-                                                    if (accountImageUrl != null) {
-                                                        AsyncImage(
-                                                            model = accountImageUrl,
-                                                            contentDescription = stringResource(R.string.account),
-                                                            modifier =
-                                                                Modifier
-                                                                    .size(24.dp)
-                                                                    .clip(CircleShape),
-                                                        )
-                                                    } else {
-                                                        Icon(
-                                                            painter = painterResource(R.drawable.account),
-                                                            contentDescription = stringResource(R.string.account),
-                                                            modifier = Modifier.size(24.dp),
-                                                        )
-                                                    }
-                                                }
-                                            }
+
+
                                         },
                                         scrollBehavior = topAppBarScrollBehavior,
                                         colors =
                                             TopAppBarDefaults.topAppBarColors(
-                                                containerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
-                                                scrolledContainerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
+                                                containerColor = Color.Transparent,
+                                                scrolledContainerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.85f),
                                                 titleContentColor = MaterialTheme.colorScheme.onSurface,
                                                 actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1388,7 +1329,6 @@ class MainActivity : FragmentActivity() {
                                             slideOutHorizontally { it / 8 } + fadeOut(tween(200))
                                         }
                                     },
-                                    modifier = Modifier.nestedScroll(topAppBarScrollBehavior.nestedScrollConnection),
                                 ) {
                                     navigationBuilder(
                                         navController = navController,
@@ -1447,78 +1387,11 @@ class MainActivity : FragmentActivity() {
                         }
                     }
 
-                    if (!showChangelog.value) {
-                        availableUpdate?.let { update ->
-                            val dismissUpdate: () -> Unit = {
-                                availableUpdate = null
-                                lifecycleScope.launch {
-                                    safeDataStoreEdit {
-                                        it[update.dismissalKey] = update.release.tagName
-                                    }
-                                }
-                            }
-                            AlertDialog(
-                                onDismissRequest = dismissUpdate,
-                                title = { Text(stringResource(R.string.update_available_title)) },
-                                text = {
-                                    Column(
-                                        modifier =
-                                            Modifier
-                                                .heightIn(max = 480.dp)
-                                                .verticalScroll(rememberScrollState()),
-                                    ) {
-                                        Text(
-                                            text =
-                                                stringResource(
-                                                    if (update.isKmp) {
-                                                        R.string.kmp_upgrade_title
-                                                    } else {
-                                                        R.string.update_available_message
-                                                    },
-                                                    update.release.versionName,
-                                                ),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                        if (update.isKmp) {
-                                            Text(
-                                                text = stringResource(R.string.kmp_upgrade_warning),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.padding(top = 12.dp),
-                                            )
-                                        }
-                                        Text(
-                                            text = stringResource(R.string.changelog),
-                                            style = MaterialTheme.typography.titleSmall,
-                                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-                                        )
-                                        Text(
-                                            text = update.release.description.ifBlank { stringResource(R.string.changelog_empty) },
-                                            style = MaterialTheme.typography.bodySmall,
-                                        )
-                                    }
-                                },
-                                confirmButton = {
-                                    TextButton(
-                                        onClick = {
-                                            dismissUpdate()
-                                            startActivity(Intent(Intent.ACTION_VIEW, update.downloadUrl.toUri()))
-                                        },
-                                    ) {
-                                        Text(
-                                            stringResource(
-                                                if (update.isKmp) R.string.kmp_upgrade_action else R.string.update_action,
-                                            ),
-                                        )
-                                    }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = dismissUpdate) {
-                                        Text(stringResource(R.string.kmp_upgrade_later))
-                                    }
-                                },
-                            )
-                        }
+                    if (showWelcomeSplash && familyMemberName != null) {
+                        FamilyWelcomeSplash(
+                            memberName = familyMemberName,
+                            onDismiss = { showWelcomeSplash = false },
+                        )
                     }
                 }
             }
@@ -1596,15 +1469,48 @@ class MainActivity : FragmentActivity() {
         intent.removeExtra(Intent.EXTRA_TEXT)
         val coroutineScope = lifecycle.coroutineScope
 
-        val listenCode =
-            uri.getQueryParameter("code")
-                ?: uri.getQueryParameter("room")
-                ?: uri.pathSegments.getOrNull(1)
-        val isListenLink = uri.pathSegments.firstOrNull() == "listen" || uri.host?.equals("listen", ignoreCase = true) == true
-        if (!listenCode.isNullOrBlank() && isListenLink) {
-            val username = dataStore.get(ListenTogetherUsernameKey, "").ifBlank { "Guest" }
-            listenTogetherManager.joinRoom(listenCode, username)
-            return
+
+
+        val isDownloadLink = uri.scheme == "taskinmusic" || uri.pathSegments.firstOrNull() == "download" || uri.host?.equals("download", ignoreCase = true) == true
+        if (isDownloadLink) {
+            val songId = uri.getQueryParameter("id") ?: uri.getQueryParameter("v") ?: uri.pathSegments.getOrNull(1)
+            val songTitle = uri.getQueryParameter("title")
+            val songArtist = uri.getQueryParameter("artist")
+            if (!songId.isNullOrBlank()) {
+                coroutineScope.launch(Dispatchers.IO) {
+                    val fallbackTitle = songTitle ?: getString(R.string.tracks)
+                    val artistsList = if (!songArtist.isNullOrBlank()) listOf(MediaMetadata.Artist(id = null, name = songArtist)) else emptyList()
+                    val fallbackMetadata = MediaMetadata(
+                        id = songId,
+                        title = fallbackTitle,
+                        artists = artistsList,
+                        duration = 0,
+                        thumbnailUrl = "https://i.ytimg.com/vi/$songId/hqdefault.jpg",
+                    )
+                    YouTube.queue(listOf(songId)).onSuccess { queue ->
+                        val item = queue.firstOrNull()
+                        val mediaMetadata = item?.toMediaMetadata() ?: fallbackMetadata
+                        downloadUtil.download(mediaMetadata)
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                this@MainActivity,
+                                getString(R.string.taskin_download_started, mediaMetadata.title),
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }.onFailure {
+                        downloadUtil.download(fallbackMetadata)
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                this@MainActivity,
+                                getString(R.string.taskin_download_started, fallbackMetadata.title),
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }
+                }
+                return
+            }
         }
 
         when (val path = uri.pathSegments.firstOrNull()) {
@@ -1717,11 +1623,14 @@ class MainActivity : FragmentActivity() {
 
 val LocalDatabase = staticCompositionLocalOf<MusicDatabase> { error("No database provided") }
 val LocalNavController = staticCompositionLocalOf<NavController> { error("No NavController provided") }
-val LocalPlayerConnection = staticCompositionLocalOf<PlayerConnection?> { error("No PlayerConnection provided") }
+val LocalPlayerConnection = compositionLocalOf<PlayerConnection?> { error("No PlayerConnection provided") }
 val LocalPlayerAwareWindowInsets = compositionLocalOf<WindowInsets> { error("No WindowInsets provided") }
 val LocalDownloadUtil = staticCompositionLocalOf<DownloadUtil> { error("No DownloadUtil provided") }
 val LocalSyncUtils = staticCompositionLocalOf<SyncUtils> { error("No SyncUtils provided") }
-val LocalListenTogetherManager = staticCompositionLocalOf<com.metrolist.music.listentogether.ListenTogetherManager?> { null }
+val LocalListenTogetherManager = compositionLocalOf<com.metrolist.music.listentogether.ListenTogetherManager?> { null }
 val LocalChangelogState = staticCompositionLocalOf<MutableState<Boolean>> { error("No LocalChangelogState provided") }
-val LocalArtistNameAliases = staticCompositionLocalOf<Map<String, String>> { emptyMap() }
+val LocalArtistNameAliases = compositionLocalOf<Map<String, String>> { emptyMap() }
 val LocalIsPlayerExpanded = compositionLocalOf { false }
+val LocalCropAlbumArt = compositionLocalOf { false }
+val LocalSwipeToSong = compositionLocalOf { false }
+val LocalGridItemSize = compositionLocalOf { com.metrolist.music.constants.GridItemSize.BIG }

@@ -350,15 +350,18 @@ fun ExperimentalLyrics(
             isSeeking = sliderPosition != null
             
             val position = if (isSeeking) {
-                sliderPosition!!
+                lastPlayerPos = sliderPosition!!
+                lastUpdateTime = now
+                sliderPosition
             } else {
+                val isPlaying = playerConnection.player.isPlaying
                 val playerPos = playerConnection.player.currentPosition
-                if (playerPos != lastPlayerPos) {
+                if (playerPos != lastPlayerPos || !isPlaying) {
                     lastPlayerPos = playerPos
                     lastUpdateTime = now
                 }
-                val elapsed = now - lastUpdateTime
-                lastPlayerPos + (if (playerConnection.player.isPlaying) elapsed else 0)
+                val elapsed = (now - lastUpdateTime).coerceIn(0L, 100L)
+                lastPlayerPos + (if (isPlaying) elapsed else 0L)
             }
             
             currentPositionState = position

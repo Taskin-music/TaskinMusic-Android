@@ -75,6 +75,7 @@ import com.metrolist.music.ui.component.Material3MenuItemData
 import com.metrolist.music.ui.component.MediaMetadataListItem
 import com.metrolist.music.ui.component.NewAction
 import com.metrolist.music.ui.component.NewActionGrid
+import com.metrolist.music.ui.component.ShareSongDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -130,6 +131,22 @@ fun QueueMenu(
 
     var showSelectArtistDialog by rememberSaveable {
         mutableStateOf(false)
+    }
+
+    var showShareDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    if (showShareDialog) {
+        ShareSongDialog(
+            songId = mediaMetadata.id,
+            songTitle = mediaMetadata.title,
+            songArtist = mediaMetadata.artists.joinToString { it.name },
+            onDismiss = {
+                showShareDialog = false
+                onDismiss()
+            },
+        )
     }
 
     if (showSelectArtistDialog) {
@@ -315,16 +332,7 @@ fun QueueMenu(
                         },
                         text = stringResource(R.string.share),
                         onClick = {
-                            onDismiss()
-                            val intent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                type = "text/plain"
-                                putExtra(
-                                    Intent.EXTRA_TEXT,
-                                    "https://music.youtube.com/watch?v=${mediaMetadata.id}"
-                                )
-                            }
-                            context.startActivity(Intent.createChooser(intent, null))
+                            showShareDialog = true
                         }
                     )
                 ),

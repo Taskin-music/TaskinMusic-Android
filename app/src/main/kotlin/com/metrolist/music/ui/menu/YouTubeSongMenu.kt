@@ -80,6 +80,10 @@ import com.metrolist.music.ui.component.Material3MenuGroup
 import com.metrolist.music.ui.component.Material3MenuItemData
 import com.metrolist.music.ui.component.NewAction
 import com.metrolist.music.ui.component.NewActionGrid
+import com.metrolist.music.ui.component.ShareSongDialog
+import com.metrolist.music.ui.component.TrimSongDialog
+import com.metrolist.music.ui.component.FormatConverterDialog
+import com.metrolist.music.ui.component.MergeSongsDialog
 import com.metrolist.music.ui.utils.ShowMediaInfo
 import com.metrolist.music.ui.utils.resize
 import com.metrolist.music.utils.ArtistNameAliases
@@ -137,6 +141,57 @@ fun YouTubeSongMenu(
         onGetSongIds = { listOf(song.id) },
         onDismiss = { showChoosePlaylistDialog = false }
     )  
+
+    var showShareDialog by rememberSaveable {  
+        mutableStateOf(false)  
+    }  
+
+    if (showShareDialog) {  
+        ShareSongDialog(  
+            songId = song.id,  
+            songTitle = song.title,  
+            songArtist = song.artists.joinToString { it.name },  
+            onDismiss = {  
+                showShareDialog = false  
+                onDismiss()  
+            },  
+        )  
+    }  
+
+    var showTrimDialog by rememberSaveable {  
+        mutableStateOf(false)  
+    }  
+
+    if (showTrimDialog) {  
+        TrimSongDialog(  
+            songItem = song,  
+            onDismiss = { showTrimDialog = false },  
+            onSuccess = { onDismiss() },  
+        )  
+    }  
+
+    var showFormatConverterDialog by rememberSaveable {  
+        mutableStateOf(false)  
+    }  
+
+    if (showFormatConverterDialog) {  
+        FormatConverterDialog(  
+            songItem = song,  
+            onDismiss = { showFormatConverterDialog = false },  
+        )  
+    }  
+
+    var showMergeSongsDialog by rememberSaveable {  
+        mutableStateOf(false)  
+    }  
+
+    if (showMergeSongsDialog) {  
+        MergeSongsDialog(  
+            songItem = song,  
+            onDismiss = { showMergeSongsDialog = false },  
+            onSuccess = { onDismiss() },  
+        )  
+    }  
 
     var showSelectArtistDialog by rememberSaveable {  
         mutableStateOf(false)  
@@ -336,13 +391,7 @@ fun YouTubeSongMenu(
                         },
                         text = stringResource(R.string.share),
                         onClick = {
-                            val intent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, song.shareLink)
-                            }
-                            context.startActivity(Intent.createChooser(intent, null))
-                            onDismiss()
+                            showShareDialog = true
                         }
                     )
                 ),
@@ -563,6 +612,51 @@ fun YouTubeSongMenu(
                             }
                         )
                     )
+                    add(
+                        Material3MenuItemData(
+                            title = { Text(text = stringResource(R.string.trim_song)) },
+                            description = { Text(text = stringResource(R.string.trim_song_desc)) },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.content_cut),
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                showTrimDialog = true
+                            },
+                        )
+                    )
+                    add(
+                        Material3MenuItemData(
+                            title = { Text(text = stringResource(R.string.convert_format)) },
+                            description = { Text(text = stringResource(R.string.convert_format_desc)) },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.transform),
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                showFormatConverterDialog = true
+                            },
+                        )
+                    )
+                    add(
+                        Material3MenuItemData(
+                            title = { Text(text = stringResource(R.string.merge_songs)) },
+                            description = { Text(text = stringResource(R.string.merge_songs_desc)) },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.queue_music),
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                showMergeSongsDialog = true
+                            },
+                        )
+                    )
                 }
             )
         }
@@ -572,8 +666,14 @@ fun YouTubeSongMenu(
         item {
             Material3MenuGroup(
                 items = listOf(
-                    when (download?.state) {
-                        Download.STATE_COMPLETED -> {
+                    run {
+                        val isAlreadyDownloaded = download?.state == Download.STATE_COMPLETED ||
+                            librarySong?.song?.isDownloaded == true ||
+                            librarySong?.song?.isLocal == true
+                        val isDownloading = download?.state == Download.STATE_QUEUED ||
+                            download?.state == Download.STATE_DOWNLOADING
+
+                        if (isAlreadyDownloaded) {
                             Material3MenuItemData(
                                 title = {
                                     Text(
@@ -593,10 +693,16 @@ fun YouTubeSongMenu(
                                         song.id,
                                         false,
                                     )
+                                    coroutineScope.launch {
+                                        database.query {
+                                            librarySong?.let {
+                                                update(it.song.copy(isDownloaded = false))
+                                            }
+                                        }
+                                    }
                                 }
                             )
-                        }
-                        Download.STATE_QUEUED, Download.STATE_DOWNLOADING -> {
+                        } else if (isDownloading) {
                             Material3MenuItemData(
                                 title = { Text(text = stringResource(R.string.downloading)) },
                                 icon = {
@@ -614,15 +720,14 @@ fun YouTubeSongMenu(
                                     )
                                 }
                             )
-                        }
-                        else -> {
+                        } else {
                             Material3MenuItemData(
                                 title = { Text(text = stringResource(R.string.action_download)) },
                                 description = { Text(text = stringResource(R.string.download_desc)) },
                                 icon = {
                                     Icon(
                                         painter = painterResource(R.drawable.download),
-                                        contentDescription = null,
+                                        contentDescription = null
                                     )
                                 },
                                 onClick = {

@@ -9,6 +9,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -27,12 +29,19 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -103,9 +112,10 @@ private data class VisiblePlaylistItem(
 @Composable
 fun LibraryPlaylistsScreen(
     navController: NavController,
-    filterContent: @Composable () -> Unit,
+    filterContent: @Composable () -> Unit = {},
     viewType: LibraryViewType,
     onViewTypeChange: (LibraryViewType) -> Unit,
+    contentPadding: PaddingValues = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
     viewModel: LibraryPlaylistsViewModel = hiltViewModel(),
     initialTextFieldValue: String? = null,
     allowSyncing: Boolean = true,
@@ -207,79 +217,16 @@ fun LibraryPlaylistsScreen(
     val showUploadedPlaylists =
         showUploaded && matchesNormalizedQuery(normalizedQuery, uploadedPlaylist.playlist.name)
 
-    val visibleResults = remember(
-        filteredPlaylists,
-        showLikedPlaylist,
-        showDownloadedPlaylist,
-        showCachedPlaylists,
-        showTopPlaylists,
-        showUploadedPlaylists,
-        topSize,
-    ) {
-        buildList {
-            if (showLikedPlaylist) {
-                add(
-                    VisiblePlaylistItem(
-                        key = "likedPlaylist",
-                        playlist = likedPlaylist,
-                        autoPlaylist = true,
-                        route = "auto_playlist/liked",
-                    ),
+    val visibleResults = remember(filteredPlaylists) {
+        filteredPlaylists
+            .distinctBy { it.id }
+            .map { playlist ->
+                VisiblePlaylistItem(
+                    key = playlist.id,
+                    playlist = playlist,
+                    autoPlaylist = false,
                 )
             }
-            if (showDownloadedPlaylist) {
-                add(
-                    VisiblePlaylistItem(
-                        key = "downloadedPlaylist",
-                        playlist = downloadPlaylist,
-                        autoPlaylist = true,
-                        route = "auto_playlist/downloaded",
-                    ),
-                )
-            }
-            if (showCachedPlaylists) {
-                add(
-                    VisiblePlaylistItem(
-                        key = "cachedPlaylist",
-                        playlist = cachedPlaylist,
-                        autoPlaylist = true,
-                        route = "cache_playlist/cached",
-                    ),
-                )
-            }
-            if (showTopPlaylists) {
-                add(
-                    VisiblePlaylistItem(
-                        key = "TopPlaylist",
-                        playlist = topPlaylist,
-                        autoPlaylist = true,
-                        route = "top_playlist/$topSize",
-                    ),
-                )
-            }
-            if (showUploadedPlaylists) {
-                add(
-                    VisiblePlaylistItem(
-                        key = "uploadedPlaylist",
-                        playlist = uploadedPlaylist,
-                        autoPlaylist = true,
-                        route = "auto_playlist/uploaded",
-                    ),
-                )
-            }
-
-            filteredPlaylists
-                .distinctBy { it.id }
-                .forEach { playlist ->
-                    add(
-                        VisiblePlaylistItem(
-                            key = playlist.id,
-                            playlist = playlist,
-                            autoPlaylist = false,
-                        ),
-                    )
-                }
-        }
     }
 
     val lazyListState = rememberLazyListState()
@@ -409,7 +356,7 @@ fun LibraryPlaylistsScreen(
             LibraryViewType.LIST -> {
                 LazyColumn(
                     state = lazyListState,
-                    contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
+                    contentPadding = contentPadding,
                 ) {
                     item(
                         key = "filter",
@@ -430,10 +377,9 @@ fun LibraryPlaylistsScreen(
                             if (searchQuery.isNotBlank()) {
                                 LibrarySearchEmptyPlaceholder(modifier = Modifier.animateItem())
                             } else {
-                                LibrarySearchEmptyPlaceholder(
+                                EmptyPlaylistsView(
+                                    onCreatePlaylist = { showCreatePlaylistDialog = true },
                                     modifier = Modifier.animateItem(),
-                                    icon = R.drawable.playlist_play,
-                                    text = stringResource(R.string.library_playlist_empty),
                                 )
                             }
                         }
@@ -475,7 +421,7 @@ fun LibraryPlaylistsScreen(
                     GridCells.Adaptive(
                         minSize = GridThumbnailHeight + if (gridItemSize == GridItemSize.BIG) 24.dp else (-24).dp,
                     ),
-                    contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
+                    contentPadding = contentPadding,
                 ) {
                     item(
                         key = "filter",
@@ -498,10 +444,9 @@ fun LibraryPlaylistsScreen(
                             if (searchQuery.isNotBlank()) {
                                 LibrarySearchEmptyPlaceholder(modifier = Modifier.animateItem())
                             } else {
-                                LibrarySearchEmptyPlaceholder(
+                                EmptyPlaylistsView(
+                                    onCreatePlaylist = { showCreatePlaylistDialog = true },
                                     modifier = Modifier.animateItem(),
-                                    icon = R.drawable.playlist_play,
-                                    text = stringResource(R.string.library_playlist_empty),
                                 )
                             }
                         }
@@ -554,6 +499,57 @@ fun LibraryPlaylistsScreen(
             Icon(
                 painter = painterResource(R.drawable.add),
                 contentDescription = stringResource(R.string.create_playlist),
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyPlaylistsView(
+    onCreatePlaylist: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.playlist_play),
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            text = stringResource(R.string.no_playlists_title),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.no_playlists_desc),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(20.dp))
+        Button(
+            onClick = onCreatePlaylist,
+            shape = RoundedCornerShape(20.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.add),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                stringResource(R.string.create_first_playlist),
+                fontWeight = FontWeight.SemiBold,
             )
         }
     }

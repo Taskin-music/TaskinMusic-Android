@@ -5,9 +5,15 @@
 
 package com.metrolist.music.ui.menu
 
+import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.content.res.Configuration
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.metrolist.music.utils.MediaDeleteHelper
+import com.metrolist.music.utils.SongExporter
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -93,11 +99,16 @@ import com.metrolist.music.ui.component.NewAction
 import com.metrolist.music.ui.component.NewActionGrid
 import com.metrolist.music.ui.component.SongListItem
 import com.metrolist.music.ui.component.TextFieldDialog
+import com.metrolist.music.ui.component.ShareSongDialog
+import com.metrolist.music.ui.component.TrimSongDialog
+import com.metrolist.music.ui.component.FormatConverterDialog
+import com.metrolist.music.ui.component.MergeSongsDialog
 import com.metrolist.music.ui.utils.ShowMediaInfo
 import com.metrolist.music.viewmodels.CachePlaylistViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -234,6 +245,113 @@ fun SongMenu(
 
     var showErrorPlaylistAddDialog by rememberSaveable {
         mutableStateOf(false)
+    }
+
+    var showShareDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showShareDialog) {
+        ShareSongDialog(
+            songId = song.id,
+            songTitle = song.song.title,
+            songArtist = song.artists.joinToString { it.name },
+            onDismiss = {
+                showShareDialog = false
+                onDismiss()
+            },
+        )
+    }
+
+    var showTrimDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showTrimDialog) {
+        TrimSongDialog(
+            song = song,
+            onDismiss = { showTrimDialog = false },
+            onSuccess = { onDismiss() },
+        )
+    }
+
+    var showFormatConverterDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showFormatConverterDialog) {
+        FormatConverterDialog(
+            song = song,
+            onDismiss = { showFormatConverterDialog = false },
+        )
+    }
+
+    var showMergeSongsDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showMergeSongsDialog) {
+        MergeSongsDialog(
+            singleSong = song,
+            onDismiss = { showMergeSongsDialog = false },
+            onSuccess = { onDismiss() },
+        )
+    }
+
+    var showDeleteSongConfirmDialog by rememberSaveable { mutableStateOf(false) }
+    var pendingDeleteSongs by remember { mutableStateOf<List<Song>?>(null) }
+
+    val deleteMediaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            coroutineScope.launch(Dispatchers.IO) {
+                pendingDeleteSongs?.let {
+                    MediaDeleteHelper.performPostDeleteCleanup(context, database, playerConnection, it)
+                }
+                pendingDeleteSongs = null
+                withContext(Dispatchers.Main) {
+                    onDismiss()
+                }
+            }
+        }
+    }
+
+    if (showDeleteSongConfirmDialog) {
+        DefaultDialog(
+            onDismiss = { showDeleteSongConfirmDialog = false },
+            title = { Text(stringResource(R.string.delete)) },
+            content = {
+                Text(stringResource(R.string.delete_song_confirm))
+            },
+            buttons = {
+                TextButton(onClick = { showDeleteSongConfirmDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+                TextButton(
+                    onClick = {
+                        showDeleteSongConfirmDialog = false
+                        coroutineScope.launch(Dispatchers.IO) {
+                            val result = MediaDeleteHelper.requestDeleteSongs(context, listOf(song))
+                            when (result) {
+                                is MediaDeleteHelper.DeleteResult.RequiresIntentSender -> {
+                                    pendingDeleteSongs = result.songsToDelete
+                                    withContext(Dispatchers.Main) {
+                                        deleteMediaLauncher.launch(result.intentSenderRequest)
+                                    }
+                                }
+                                is MediaDeleteHelper.DeleteResult.Completed -> {
+                                    MediaDeleteHelper.performPostDeleteCleanup(
+                                        context,
+                                        database,
+                                        playerConnection,
+                                        result.songsDeleted
+                                    )
+                                    withContext(Dispatchers.Main) {
+                                        onDismiss()
+                                    }
+                                }
+                                is MediaDeleteHelper.DeleteResult.Error -> {}
+                            }
+                        }
+                    }
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
+            }
+        )
     }
 
     AddToPlaylistDialog(
@@ -550,14 +668,7 @@ fun SongMenu(
                             },
                             text = stringResource(R.string.share),
                             onClick = {
-                                onDismiss()
-                                val intent =
-                                    Intent().apply {
-                                        action = Intent.ACTION_SEND
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_TEXT, "https://music.youtube.com/watch?v=${song.id}")
-                                    }
-                                context.startActivity(Intent.createChooser(intent, null))
+                                showShareDialog = true
                             },
                         ),
                     ),
@@ -799,6 +910,51 @@ fun SongMenu(
                                 ),
                             )
                         }
+                        add(
+                            Material3MenuItemData(
+                                title = { Text(text = stringResource(R.string.trim_song)) },
+                                description = { Text(text = stringResource(R.string.trim_song_desc)) },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.content_cut),
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = {
+                                    showTrimDialog = true
+                                },
+                            ),
+                        )
+                        add(
+                            Material3MenuItemData(
+                                title = { Text(text = stringResource(R.string.convert_format)) },
+                                description = { Text(text = stringResource(R.string.convert_format_desc)) },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.transform),
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = {
+                                    showFormatConverterDialog = true
+                                },
+                            ),
+                        )
+                        add(
+                            Material3MenuItemData(
+                                title = { Text(text = stringResource(R.string.merge_songs)) },
+                                description = { Text(text = stringResource(R.string.merge_songs_desc)) },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.queue_music),
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = {
+                                    showMergeSongsDialog = true
+                                },
+                            ),
+                        )
                         if (event != null) {
                             add(
                                 Material3MenuItemData(
@@ -897,9 +1053,34 @@ fun SongMenu(
         item {
             Material3MenuGroup(
                 items =
-                    listOf(
-                        when (download?.state) {
-                            Download.STATE_COMPLETED -> {
+                    buildList {
+                        val isAlreadyDownloaded = download?.state == Download.STATE_COMPLETED ||
+                            song.song.isDownloaded ||
+                            song.song.isLocal
+                        val isDownloading = download?.state == Download.STATE_QUEUED ||
+                            download?.state == Download.STATE_DOWNLOADING
+
+                        if (song.song.isLocal) {
+                            add(
+                                Material3MenuItemData(
+                                    title = {
+                                        Text(
+                                            text = stringResource(R.string.delete),
+                                        )
+                                    },
+                                    icon = {
+                                        Icon(
+                                            painter = painterResource(R.drawable.delete),
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        showDeleteSongConfirmDialog = true
+                                    },
+                                )
+                            )
+                        } else if (isAlreadyDownloaded) {
+                            add(
                                 Material3MenuItemData(
                                     title = {
                                         Text(
@@ -919,11 +1100,59 @@ fun SongMenu(
                                             song.id,
                                             false,
                                         )
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            val artistName = song.artists.firstOrNull()?.name.orEmpty()
+                                            val format = song.format ?: database.format(song.id).firstOrNull()
+                                            val ext = format?.mimeType?.let { mime ->
+                                                when {
+                                                    mime.contains("mp4", true) || mime.contains("m4a", true) -> "m4a"
+                                                    mime.contains("webm", true) || mime.contains("opus", true) -> "opus"
+                                                    mime.contains("mpeg", true) || mime.contains("mp3", true) -> "mp3"
+                                                    mime.contains("flac", true) -> "flac"
+                                                    mime.contains("wav", true) -> "wav"
+                                                    else -> null
+                                                }
+                                            }
+                                            SongExporter.deleteExportedSong(context, song.song.title, artistName, ext)
+                                            database.query {
+                                                update(song.song.copy(isDownloaded = false))
+                                            }
+                                        }
+                                        onDismiss()
                                     },
                                 )
+                            )
+                            if (!song.song.isLocal) {
+                                add(
+                                    Material3MenuItemData(
+                                        title = { Text(text = stringResource(R.string.export_to_music_folder)) },
+                                        description = { Text(text = stringResource(R.string.export_to_music_folder_desc)) },
+                                        icon = {
+                                            Icon(
+                                                painter = painterResource(R.drawable.download),
+                                                contentDescription = null,
+                                            )
+                                        },
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                val result = SongExporter.exportSongToMusicFolder(
+                                                    context = context,
+                                                    mediaId = song.id,
+                                                    downloadCache = downloadUtil.downloadCache,
+                                                    database = database,
+                                                )
+                                                if (result.isSuccess) {
+                                                    Toast.makeText(context, context.getString(R.string.export_song_success), Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    Toast.makeText(context, context.getString(R.string.export_song_failed), Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        },
+                                    )
+                                )
                             }
-
-                            Download.STATE_QUEUED, Download.STATE_DOWNLOADING -> {
+                        } else if (isDownloading) {
+                            add(
                                 Material3MenuItemData(
                                     title = { Text(text = stringResource(R.string.downloading)) },
                                     icon = {
@@ -941,9 +1170,9 @@ fun SongMenu(
                                         )
                                     },
                                 )
-                            }
-
-                            else -> {
+                            )
+                        } else {
+                            add(
                                 Material3MenuItemData(
                                     title = { Text(text = stringResource(R.string.action_download)) },
                                     description = { Text(text = stringResource(R.string.download_desc)) },
@@ -957,9 +1186,9 @@ fun SongMenu(
                                         downloadUtil.download(song)
                                     },
                                 )
-                            }
-                        },
-                    ),
+                            )
+                        }
+                    },
             )
         }
 

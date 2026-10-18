@@ -1160,7 +1160,7 @@ class ListenTogetherClient
                         log(LogLevel.INFO, "Join request received", "User: ${payload.username}")
 
                         // Check if auto-approval is enabled
-                        val autoApprovalEnabled = context.dataStore.get(ListenTogetherAutoApprovalKey, false)
+                        val autoApprovalEnabled = context.dataStore.get(ListenTogetherAutoApprovalKey, true)
 
                         if (_role.value == RoomRole.HOST) {
                             if (autoApprovalEnabled) {

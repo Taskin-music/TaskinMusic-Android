@@ -6,8 +6,13 @@
 package com.metrolist.music.ui.menu
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.res.Configuration
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.metrolist.music.utils.MediaDeleteHelper
+import com.metrolist.music.utils.SongExporter
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -60,6 +65,7 @@ import com.metrolist.music.playback.queues.ListQueue
 import com.metrolist.music.ui.component.DefaultDialog
 import com.metrolist.music.ui.component.Material3MenuGroup
 import com.metrolist.music.ui.component.Material3MenuItemData
+import com.metrolist.music.ui.component.MergeSongsDialog
 import com.metrolist.music.ui.component.NewAction
 import com.metrolist.music.ui.component.NewActionGrid
 import kotlinx.coroutines.Dispatchers
@@ -144,6 +150,21 @@ fun SelectionSongMenu(
         },
     )
 
+    var showMergeSongsDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    if (showMergeSongsDialog) {
+        MergeSongsDialog(
+            initialSongs = songSelection,
+            onDismiss = { showMergeSongsDialog = false },
+            onSuccess = {
+                clearAction()
+                onDismiss()
+            },
+        )
+    }
+
     var showRemoveDownloadDialog by remember {
         mutableStateOf(false)
     }
@@ -154,6 +175,24 @@ fun SelectionSongMenu(
     var isDeleting by remember { mutableStateOf(false) }
     var deleteProgress by remember { mutableIntStateOf(0) }
     var totalToDelete by remember { mutableIntStateOf(0) }
+
+    var pendingDeleteSongs by remember { mutableStateOf<List<Song>?>(null) }
+    val deleteMediaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            coroutineScope.launch(Dispatchers.IO) {
+                pendingDeleteSongs?.let {
+                    MediaDeleteHelper.performPostDeleteCleanup(context, database, playerConnection, it)
+                }
+                pendingDeleteSongs = null
+                withContext(Dispatchers.Main) {
+                    clearAction()
+                    onDismiss()
+                }
+            }
+        }
+    }
 
     if (showRemoveDownloadDialog) {
         DefaultDialog(
@@ -177,13 +216,29 @@ fun SelectionSongMenu(
                 TextButton(
                     onClick = {
                         showRemoveDownloadDialog = false
-                        songSelection.forEach { song ->
-                            DownloadService.sendRemoveDownload(
-                                context,
-                                ExoDownloadService::class.java,
-                                song.song.id,
-                                false,
-                            )
+                        coroutineScope.launch(Dispatchers.IO) {
+                            val result = MediaDeleteHelper.requestDeleteSongs(context, songSelection)
+                            when (result) {
+                                is MediaDeleteHelper.DeleteResult.RequiresIntentSender -> {
+                                    pendingDeleteSongs = result.songsToDelete
+                                    withContext(Dispatchers.Main) {
+                                        deleteMediaLauncher.launch(result.intentSenderRequest)
+                                    }
+                                }
+                                is MediaDeleteHelper.DeleteResult.Completed -> {
+                                    MediaDeleteHelper.performPostDeleteCleanup(
+                                        context,
+                                        database,
+                                        playerConnection,
+                                        result.songsDeleted
+                                    )
+                                    withContext(Dispatchers.Main) {
+                                        clearAction()
+                                        onDismiss()
+                                    }
+                                }
+                                is MediaDeleteHelper.DeleteResult.Error -> {}
+                            }
                         }
                     },
                 ) {
@@ -443,6 +498,23 @@ fun SelectionSongMenu(
                                 },
                             ),
                         )
+                        if (songSelection.size >= 2) {
+                            add(
+                                Material3MenuItemData(
+                                    title = { Text(text = stringResource(R.string.merge_songs)) },
+                                    description = { Text(text = stringResource(R.string.merge_songs_desc)) },
+                                    icon = {
+                                        Icon(
+                                            painter = painterResource(R.drawable.queue_music),
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        showMergeSongsDialog = true
+                                    },
+                                ),
+                            )
+                        }
                         add(
                             Material3MenuItemData(
                                 title = {
@@ -761,6 +833,21 @@ fun SelectionMediaMetadataMenu(
         )
     }
 
+    var showMergeSongsDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    if (showMergeSongsDialog) {
+        MergeSongsDialog(
+            initialMetadataList = songSelection,
+            onDismiss = { showMergeSongsDialog = false },
+            onSuccess = {
+                clearAction()
+                onDismiss()
+            },
+        )
+    }
+
     LazyColumn(
         contentPadding =
             PaddingValues(
@@ -876,6 +963,23 @@ fun SelectionMediaMetadataMenu(
                                 },
                             ),
                         )
+                        if (songSelection.size >= 2) {
+                            add(
+                                Material3MenuItemData(
+                                    title = { Text(text = stringResource(R.string.merge_songs)) },
+                                    description = { Text(text = stringResource(R.string.merge_songs_desc)) },
+                                    icon = {
+                                        Icon(
+                                            painter = painterResource(R.drawable.queue_music),
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        showMergeSongsDialog = true
+                                    },
+                                ),
+                            )
+                        }
                     },
             )
         }

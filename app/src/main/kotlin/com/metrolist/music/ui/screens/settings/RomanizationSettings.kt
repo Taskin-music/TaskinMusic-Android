@@ -42,9 +42,7 @@ import com.metrolist.music.ui.utils.backToMain
 import com.metrolist.music.utils.rememberPreference
 
 val defaultList = mutableListOf(
-    "Japanese" to true,
     "Korean" to true,
-    "Chinese" to true,
     "Hindi" to true,
     "Punjabi" to true,
     "Russian" to true,

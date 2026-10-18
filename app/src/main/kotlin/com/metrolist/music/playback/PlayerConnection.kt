@@ -44,7 +44,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.LocalDate
 import java.time.LocalTime
@@ -56,7 +58,7 @@ class PlayerConnection(
     context: Context,
     binder: MusicBinder,
     val database: MusicDatabase,
-    scope: CoroutineScope,
+    val scope: CoroutineScope,
 ) : Player.Listener {
     private companion object {
         private const val TAG = "PlayerConnection"
@@ -481,7 +483,7 @@ class PlayerConnection(
             }.toMap()
     }
 
-    private fun checkAndStartAutomaticSleepTimer(): Boolean {
+    private suspend fun checkAndStartAutomaticSleepTimer(): Boolean {
         return try {
             val sleepTimerEnabled = service.applicationContext.dataStore.get(SleepTimerEnabledKey) ?: false
             Timber.tag(TAG).d("✓ Sleep Timer Check: enabled=$sleepTimerEnabled")
@@ -580,7 +582,9 @@ class PlayerConnection(
 
             if (isTimeInRange) {
                 Timber.tag(TAG).i("AUTO SLEEP TIMER STARTED: $sleepTimerDefaultMinutes minutes")
-                service.sleepTimer?.start(sleepTimerDefaultMinutes)
+                withContext(Dispatchers.Main) {
+                    service.sleepTimer?.start(sleepTimerDefaultMinutes)
+                }
                 return true
             }
 
@@ -606,7 +610,9 @@ class PlayerConnection(
 
         // Central sleep timer trigger: fires on every paused -> playing transition,
         if (newPlayWhenReady && !wasPlaying) {
-            checkAndStartAutomaticSleepTimer()
+            scope.launch(Dispatchers.IO) {
+                checkAndStartAutomaticSleepTimer()
+            }
         }
     }
 

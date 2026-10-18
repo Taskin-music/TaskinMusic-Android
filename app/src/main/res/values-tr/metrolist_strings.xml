@@ -163,7 +163,7 @@
     <string name="scrobble_delay_minutes">Scrobble gecikmesi (dakika)</string>
     <string name="swipe_song_to_remove">Şarkıyı oynatma listesinden kaldırmak için kaydırın</string>
     <string name="last_fm_send_likes">Beğenilenleri ve beğenilmeyenleri eşitle</string>
-    <string name="last_fm_send_likes_description">Metrolist\'te bir şarkıyı beğendiğinizde veya beğenmediğinizde bu Last.fm\'de güncellenir</string>
+    <string name="last_fm_send_likes_description">Taşkın Music\'te bir şarkıyı beğendiğinizde veya beğenmediğinizde bu Last.fm\'de güncellenir</string>
     <string name="primary_color_style">Ana renk</string>
     <string name="auto_scroll">Yeniden eşitle</string>
     <string name="google_cast">Google Cast</string>
@@ -225,15 +225,15 @@
     <string name="wrapped_total_artists_subtitle">farklı sanatçı!</string>
     <string name="wrapped_total_songs_title">Şunları dinledin</string>
     <string name="wrapped_total_songs_subtitle">farklı şarkı!</string>
-    <string name="wrapped_intro_title">METROLIST</string>
+    <string name="wrapped_intro_title">TAŞKIN MUSIC</string>
     <string name="wrapped_intro_subtitle">bu yıl neler dinlediğine bakma zamanı…</string>
     <string name="wrapped_intro_button">hadi başlayalım!</string>
-    <string name="wrapped_logo_content_description">Metrolist Logosu</string>
+    <string name="wrapped_logo_content_description">Taşkın Music Logosu</string>
     <string name="wrapped_year">2025</string>
     <string name="wrapped_ready_title">ÖZETİN HAZIR!</string>
     <string name="wrapped_ready_subtitle">Bu yıl neleri sevdiğini görme zamanı…</string>
     <string name="wrapped_thank_you">Dinlediğin için teşekkürler!</string>
-    <string name="wrapped_special_thanks">Metrolist\'i oluşturduğu için MO Agamy\'ye özel teşekkürler</string>
+    <string name="wrapped_special_thanks">Taşkın Music altyapısını oluşturan MO Agamy\'ye özel teşekkürler</string>
     <string name="wrapped_close">Özeti kapat</string>
     <string name="wrapped_playlist_title">%s Özetin</string>
     <string name="wrapped_create_playlist">Oynatma listesi oluştur</string>
@@ -268,7 +268,7 @@
     <string name="system_equalizer">Sistem ekolayzırı</string>
     <string name="album_art">Albüm görseli</string>
     <string name="no_song_playing">Oynatılan şarkı yok</string>
-    <string name="tap_to_open">Metrolist\'i açmak için dokun</string>
+    <string name="tap_to_open">Taşkın Music\'i açmak için dokun</string>
     <string name="previous">Önceki</string>
     <string name="play_pause">Oynat/Duraklat</string>
     <string name="next">Sonraki</string>
@@ -361,7 +361,7 @@
     <string name="crash_description">Beklenmedik bir hata oluştu. Sorunu düzeltmemize yardımcı olmak için lütfen hata raporunu paylaşın</string>
     <string name="crash_share_logs">Kayıtları paylaş</string>
     <string name="crash_share_title">Hata raporlarını paylaş</string>
-    <string name="crash_report_subject">Metrolist hata raporu</string>
+    <string name="crash_report_subject">Taşkın Music hata raporu</string>
     <string name="crash_close">Kapat</string>
     <string name="crash_no_log">Çökme kayıtları mevcut değil</string>
     <string name="palette_dynamic">Dinamik</string>
@@ -410,7 +410,7 @@
     <string name="user_blocked_by_host">Oda sahibi tarafından engellendi</string>
     <string name="transfer_ownership">Sahipliği devret</string>
     <string name="not_playing">Şarkı oynatılmıyor</string>
-    <string name="tap_to_play">Metrolist\'i açmak için dokun</string>
+    <string name="tap_to_play">Taşkın Music\'i açmak için dokun</string>
     <string name="widget_music_player">Müzik Çalar</string>
     <string name="widget_turntable">Dönen plak</string>
     <string name="together">Birlikte</string>
@@ -457,7 +457,7 @@
     <string name="song_title_column">Şarkı adı sütunu</string>
     <string name="recently_converted">Son dönüştürülenler</string>
     <string name="importing_csv">CSV içe aktarılıyor…</string>
-    <string name="play_on_app">Metrolist\'te Oynat</string>
+    <string name="play_on_app">Taşkın Music ile Dinle</string>
     <string name="listening">Dinleniliyor…</string>
     <string name="continue_action">Devam et</string>
     <string name="enable">Etkinleştir</string>
@@ -493,7 +493,7 @@
     <string name="discord_buttons">Butonlar</string>
     <string name="discord_button_1">1. buton</string>
     <string name="discord_button_2">2. buton</string>
-    <string name="discord_information_warning">Metrolist, ne dinlediğinizi paylaşmak için Discord\'un herkese açık OAuth2 ve Gateway API\'lerini kullanır. Yetkilendirme, kodu aldıktan sonra kendini kapatan yerel bir tarayıcı oturumu üzerinden yapılır; üçüncü taraf sunuculara hiçbir şey gönderilmez. Token\'ınız bu cihazda şifrelenmiş tercihlerde saklanır ve asla paylaşılmaz. Metrolist, etkinliğinizi yayımlamak için doğrudan wss://gateway.discord.gg adresine bağlanır ve yalnızca gereken minimum kapsamı ister (sdk.social_layer_presence).</string>
+    <string name="discord_information_warning">Taşkın Music, ne dinlediğinizi paylaşmak için Discord\'un herkese açık OAuth2 ve Gateway API\'lerini kullanır. Yetkilendirme, kodu aldıktan sonra kendini kapatan yerel bir tarayıcı oturumu üzerinden yapılır; üçüncü taraf sunuculara hiçbir şey gönderilmez. Token\'ınız bu cihazda şifrelenmiş tercihlerde saklanır ve asla paylaşılmaz. Taşkın Music, etkinliğinizi yayımlamak için doğrudan wss://gateway.discord.gg adresine bağlanır ve yalnızca gereken minimum kapsamı ister (sdk.social_layer_presence).</string>
     <string name="discord_activity_type">Etkinlik türü</string>
     <string name="discord_activity_playing">Oynuyor</string>
     <string name="discord_activity_listening">Dinliyor</string>
@@ -571,7 +571,7 @@
     <string name="credits_view_repo">Depoyu görüntüle</string>
     <string name="buy_mo_a_coffee">Bana bir kahve ısmarla!</string>
     <string name="community_and_info">Topluluk ve Bilgi</string>
-    <string name="metrolist">METROLIST</string>
+    <string name="metrolist">TAŞKIN MUSIC</string>
     <string name="wanna_play_favorite_song">Onların en sevdiği şarkıyı çalmak ister misin?</string>
     <string name="yeah">Evet!</string>
     <string name="stands_with_palestine">Bu proje Filistin\'in yanındadır 🇵🇸</string>
@@ -690,7 +690,7 @@
     <string name="android_auto_reorder_hint">Bir bölümü etkinleştirmek veya devre dışı bırakmak için o bölüme dokunun.\nSıralamayı değiştirmek için sürükleme tutamacına uzun süre basın. Varsayılan olarak ilk bölüm gösterilecektir</string>
     <string name="android_auto_visible_sections">Görünür bölümler</string>
     <string name="android_auto">Android Auto</string>
-    <string name="listen_on_metrolist">Metrolist\'te dinle</string>
+    <string name="listen_on_metrolist">Taşkın Music ile Dinle</string>
     <string name="recognition_notification_failed">Tanıma başarısız oldu</string>
     <string name="recognition_notification_no_match">Eşleşme bulunamadı</string>
     <string name="recognition_notification_processing">Tanımlanıyor…</string>
@@ -839,8 +839,8 @@
     <string name="enable_landscape_scaling_desc">Büyük ekranlarda yatay mod için arayüzü ölçeklendir</string>
     <string name="enable_dynamic_icon">Dinamik ikon renkleri</string>
     <string name="enable_dynamic_icon_desc">Uygulama ikonu için dinamik tema renklerini kullan. Eğer kapatılırsa, ikon sabit renkleri kullanır.</string>
-    <string name="kmp_upgrade_title">Metrolist %s KMP sürümü kullanılabilir</string>
-    <string name="kmp_upgrade_warning">Metrolist KMP şu anda geliştirme aşamasındadır. Hatalara veya tamamlanmamış özelliklere denk gelebilirsiniz.</string>
+    <string name="kmp_upgrade_title">Taşkın Music %s KMP sürümü kullanılabilir</string>
+    <string name="kmp_upgrade_warning">Taşkın Music KMP şu anda geliştirme aşamasındadır. Hatalara veya tamamlanmamış özelliklere denk gelebilirsiniz.</string>
     <string name="kmp_upgrade_action">KMP\'yi dene</string>
     <string name="kmp_upgrade_later">Şimdi değil</string>
     <string name="android_auto_search_options">Arama seçenekleri</string>
@@ -865,7 +865,7 @@
     <string name="ai_provider_inception_help">API anahtarları için https://platform.inceptionlabs.ai sitesini ziyaret edin</string>
     <string name="enable_zemer">Zemer\'i aktifleştir</string>
     <string name="enable_zemer_desc">Yahudi müzikleri için şarkı sözleri</string>
-    <string name="update_available_message">Metrolist %s indirmeye hazır.</string>
+    <string name="update_available_message">Taşkın Music %s indirmeye hazır.</string>
     <string name="update_action">Güncelle</string>
     <string name="discord_integration">Discord entegrasyonu</string>
     <string name="enable_discord_rpc">Rich Presence\'i etkinleştir</string>

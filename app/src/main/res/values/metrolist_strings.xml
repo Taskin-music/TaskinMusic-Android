@@ -250,7 +250,7 @@
     <string name="release_notes">Release notes</string>
     <string name="changelog">Changelog</string>
     <string name="changelog_empty">No changelogs available</string>
-    <string name="github_releases_url">https://github.com/MetrolistGroup/Metrolist/releases</string>
+    <string name="github_releases_url">https://github.com/Taskin-music/TaskinMusic-Android/releases</string>
     <string name="list_bullet">•</string>
     <string name="view_on_github">View on GitHub</string>
     <string name="current_version">Current version</string>
@@ -375,12 +375,12 @@
     <string name="check_for_updates">Automatically check for updates</string>
     <string name="update_notifications">Enable update notifications</string>
     <string name="update_available_title">New update available</string>
-    <string name="update_available_message">Metrolist %s is ready to download.</string>
+    <string name="update_available_message">Taşkın Music %s indirilmeye hazır.</string>
     <string name="update_action">Update</string>
     <string name="update_channel_name">App updates</string>
     <string name="update_channel_desc">Notifications about new app versions</string>
-    <string name="kmp_upgrade_title">Metrolist KMP %s is available</string>
-    <string name="kmp_upgrade_warning">Metrolist KMP is still in development. You may encounter bugs or incomplete features.</string>
+    <string name="kmp_upgrade_title">Taşkın Music KMP %s mevcut</string>
+    <string name="kmp_upgrade_warning">Taşkın Music KMP henüz geliştirme aşamasındadır.</string>
     <string name="kmp_upgrade_action">Try KMP</string>
     <string name="kmp_upgrade_later">Not now</string>
 
@@ -413,7 +413,7 @@
     <string name="enable_scrobbling">Enable scrobbling</string>
     <string name="lastfm_now_playing">Send Now Playing status</string>
     <string name="last_fm_send_likes">Sync Loved and Unloved</string>
-    <string name="last_fm_send_likes_description">Love or unlove songs in Last.fm when you like or unlike them in Metrolist</string>
+    <string name="last_fm_send_likes_description">Last.fm şarkılarını Taşkın Music ile senkronize et</string>
     <string name="logging_in">Logging in…</string>
 
     <string name="scrobbling_configuration">Scrobbling configuration</string>
@@ -468,10 +468,10 @@
     <string name="wrapped_total_artists_subtitle">unique artists!</string>
     <string name="wrapped_total_songs_title">You\'ve listened to</string>
     <string name="wrapped_total_songs_subtitle">unique songs!</string>
-    <string name="wrapped_intro_title">METROLIST</string>
+    <string name="wrapped_intro_title">TAŞKIN MUSIC</string>
     <string name="wrapped_intro_subtitle">it\'s time to see what you\'ve been listening to all this year…</string>
     <string name="wrapped_intro_button">let\'s go!</string>
-    <string name="wrapped_logo_content_description">Metrolist Logo</string>
+    <string name="wrapped_logo_content_description">Taşkın Music Logo</string>
     <string name="wrapped_year">2025</string>
     <string name="wrapped_ready_title">YOUR WRAPPED IS READY!</string>
     <string name="wrapped_ready_subtitle">Time to see what you loved all this year…</string>
@@ -544,14 +544,14 @@
     <!-- Widget strings -->
     <string name="album_art">Album art</string>
     <string name="no_song_playing">No song playing</string>
-    <string name="tap_to_open">Tap to open Metrolist</string>
+    <string name="tap_to_open">Taşkın Music\'i açmak için dokunun</string>
     <string name="previous">Previous</string>
     <string name="play_pause">Play/Pause</string>
     <string name="player_pause">Pause</string>
     <string name="next">Next</string>
     <string name="like">Like</string>
     <string name="not_playing">No song playing</string>
-    <string name="tap_to_play">Tap to open Metrolist</string>
+    <string name="tap_to_play">Taşkın Music\'i açmak için dokunun</string>
     <string name="widget_description">Music player widget with playback controls</string>
     <string name="turntable_widget_description">Circular music widget with play and like controls</string>
     <string name="widget_music_player">Music Player</string>
@@ -714,7 +714,7 @@
     <string name="crash_description">An unexpected error occurred. Please share the crash report to help us fix the issue</string>
     <string name="crash_share_logs">Share logs</string>
     <string name="crash_share_title">Share crash report</string>
-    <string name="crash_report_subject">Metrolist crash report</string>
+    <string name="crash_report_subject">Taşkın Music hata raporu</string>
     <string name="crash_close">Close</string>
     <string name="crash_no_log">No crash log available</string>
 
@@ -766,7 +766,7 @@
     <string name="clear_recognition_history_confirm">Are you sure you want to clear all recognition history?</string>
     <string name="delete_from_history">Delete from history</string>
     <string name="re_listen">Re-listen</string>
-    <string name="play_on_app">Play on Metrolist</string>
+    <string name="play_on_app">Taşkın Music ile Dinle</string>
     <string name="qs_tile_music_recognizer">Recognize music</string>
     <string name="recognition_notification_channel_name">Music recognition</string>
     <string name="recognition_notification_channel_desc">Shows a notification while identifying a song from quick settings</string>
@@ -774,7 +774,7 @@
     <string name="recognition_notification_processing">Identifying…</string>
     <string name="recognition_notification_no_match">No match found</string>
     <string name="recognition_notification_failed">Recognition failed</string>
-    <string name="listen_on_metrolist">Listen on Metrolist</string>
+    <string name="listen_on_metrolist">Taşkın Music ile Dinle</string>
 
     <!-- CSV Import Strings -->
     <string name="map_csv_columns">Map CSV columns</string>
@@ -790,7 +790,7 @@
     <string name="column_label">Column %d</string>
 
     <string name="discord_connect_description">Sign in with Discord to share what you\'re listening to</string>
-    <string name="discord_information_warning">Metrolist uses Discord\'s public OAuth2 and Gateway APIs to share what you\'re listening to. Authorization happens through a local browser session that closes itself after capturing the code — nothing is sent to third-party servers. Your token is stored on this device in encrypted preferences and is never shared. Metrolist connects directly to wss://gateway.discord.gg to publish your activity, and only requests the minimum scope required (sdk.social_layer_presence).</string>
+    <string name="discord_information_warning">Taşkın Müzik uses Discord\'s public OAuth2 and Gateway APIs to share what you\'re listening to. Authorization happens through a local browser session that closes itself after capturing the code — nothing is sent to third-party servers. Your token is stored on this device in encrypted preferences and is never shared. Taşkın Müzik connects directly to wss://gateway.discord.gg to publish your activity, and only requests the minimum scope required (sdk.social_layer_presence).</string>
     <string name="discord_status_connected">Connected</string>
     <string name="discord_status_authorizing">Authorizing…</string>
     <string name="discord_status_authorized">Authorized</string>
@@ -826,9 +826,9 @@
     <string name="discord_status_online">Online</string>
     <string name="discord_status_idle">Idle</string>
     <string name="discord_status_dnd">Do Not Disturb</string>
-    <string name="speed_dial">Speed dial</string>
-    <string name="pin_to_speed_dial">Pin to speed dial</string>
-    <string name="unpin_from_speed_dial">Unpin from speed dial</string>
+    <string name="speed_dial">Hızlı Erişim</string>
+    <string name="pin_to_speed_dial">Hızlı Erişime Sabitle</string>
+    <string name="unpin_from_speed_dial">Hızlı Erişimden Kaldır</string>
     <string name="pin">Pin</string>
     <string name="unpin">Unpin</string>
     <string name="randomize_home_order">Randomize home screen order</string>
@@ -859,7 +859,7 @@
     <string name="credits_view_repo">View repository</string>
     <string name="buy_mo_a_coffee">Buy me a coffee!</string>
     <string name="community_and_info">Community &amp; Info</string>
-    <string name="metrolist">METROLIST</string>
+    <string name="metrolist">Taşkın Music</string>
     <string name="wanna_play_favorite_song">Want to play their favorite song?</string>
     <string name="yeah">Yeah!</string>
     <string name="stands_with_palestine">This project stands with Palestine 🇵🇸</string>
@@ -994,4 +994,127 @@
     <string name="stream_source_web_creator_desc">Creator web client.</string>
     <string name="top_result">Top result</string>
     <string name="other">Other</string>
+
+    <!-- Taskin Music Export Strings -->
+    <string name="auto_export_to_music_folder">Auto-save to Music folder</string>
+    <string name="auto_export_to_music_folder_desc">Automatically export downloaded songs to device\'s Music folder</string>
+    <string name="export_to_music_folder">Save to Music folder</string>
+    <string name="export_to_music_folder_desc">Export audio file to device\'s Music folder</string>
+    <string name="export_song_success">Saved to Music folder</string>
+    <string name="export_song_failed">Failed to save to Music folder</string>
+
+    <!-- Taskin Music Library & Navigation Strings -->
+    <string name="home_explore">Keşfet</string>
+    <string name="tracks">Tracks</string>
+    <string name="scan_local_music">Cihazdaki müzikleri tara</string>
+    <string name="scanning_local_music">Müzikler taranıyor…</string>
+    <string name="local_music_scanned">%d müzik tarandı</string>
+    <string name="storage_permission_required">Cihazdaki müzikleri dinlemek için depolama izni gereklidir</string>
+    <string name="grant_permission">İzin Ver</string>
+    <string name="theme_mode_dark">Karanlık Mod</string>
+    <string name="theme_mode_light">Aydınlık Mod</string>
+
+    <string name="download_song">Şarkıyı İndir</string>
+    <string name="download_queued">İndirme sırasına eklendi</string>
+    <string name="already_installed">Cihazda Yüklü</string>
+    <string name="device_code_title">Cihaz Kodunuz</string>
+    <string name="device_code_desc">Aileniz bu kod ile cihazınıza bağlanabilir</string>
+    <string name="start_broadcast_room">Yayın Başlat (Oda Aç)</string>
+    <string name="connect_to_code">Koda Bağlan</string>
+    <string name="enter_code_hint">Örn: Oda Kodu veya Cihaz Kodu</string>
+    <string name="code_copied">Kod panoya kopyalandı</string>
+    <string name="yearly_stats_title">Bu Yılın Dinleme Özeti</string>
+    <string name="yearly_stats_subtitle">1 Ocak\'tan bugüne dinleme alışkanlıklarınız</string>
+    <string name="no_playlists_title">Henüz Çalma Listesi Yok</string>
+    <string name="no_playlists_desc">Sevdiğin şarkıları bir araya getirmek için bir liste oluştur.</string>
+    <string name="create_first_playlist">Çalma Listesi Oluştur</string>
+    <string name="share_dialog_title">Şarkıyı Paylaş</string>
+    <string name="share_direct_mp3">Web\'den MP3 İndirme Linki</string>
+    <string name="share_direct_mp3_desc">Karşı taraf tarayıcıdan tek tıkla MP3 olarak indirir</string>
+    <string name="share_mp3_file">MP3 Dosyası Olarak Gönder</string>
+    <string name="share_mp3_file_desc">WhatsApp / Telegram üzerinden doğrudan ses dosyası at</string>
+    <string name="share_taskin_music">Taşkın Music Uygulama Linki</string>
+    <string name="share_taskin_music_desc">Taşkın Music yüklü cihazlarda şarkıyı otomatik indirir</string>
+    <string name="share_youtube_music">YouTube Music Linki</string>
+    <string name="share_youtube">YouTube Linki</string>
+    <string name="share_spotify">Spotify Linki</string>
+    <string name="share_spotify_desc">Spotify arama ve dinleme bağlantısı</string>
+    <string name="share_all_links">Tüm Linkleri Birlikte Paylaş</string>
+    <string name="share_all_links_desc">MP3 İndirme, YouTube, YT Music ve Spotify tek mesajda</string>
+    <string name="preparing_audio_file">Müzik dosyası hazırlanıyor...</string>
+    <string name="taskin_download_started">Taşkın Music: %s indirme sırasına eklendi!</string>
+
+    <!-- Ek İstekler Strings -->
+    <string name="discovered_family_devices">Aktif Aile Cihazları</string>
+    <string name="discovered_family_devices_desc">Aynı Wi-Fi ağındaki veya kayıtlı aile üyeleri</string>
+    <string name="searching_family_devices">Aynı Wi-Fi ağındaki aile üyeleri aranıyor…</string>
+    <string name="connect_now">Bağlan</string>
+    <string name="top_songs">En Çok Dinlenen Şarkılar</string>
+    <string name="top_artists">En Çok Dinlenen Sanatçılar</string>
+    <string name="file_details">Dosya ve Depolama Bilgileri</string>
+    <string name="file_location">Dosya Konumu</string>
+    <string name="file_format">Ses Formatı</string>
+    <string name="file_path">Dosya Yolu</string>
+    <string name="local_storage">Yerel Depolama (Cihaz)</string>
+    <string name="downloaded_storage">İndirilenler (Taşkın Music)</string>
+    <string name="online_stream">Çevrimiçi Akış (YouTube Music)</string>
+    <string name="delete_from_device">Cihazdan Sil</string>
+    <string name="duration">Süre</string>
+    <string name="device_online">Çevrimiçi (Aynı Wi-Fi)</string>
+    <string name="device_offline">Kayıtlı Aile Cihazı</string>
+
+    <!-- Trim & Crop Audio Feature Strings -->
+    <string name="trim_song">Şarkıyı Kırp</string>
+    <string name="trim_song_desc">Şarkının istediğin kısmını kes ve kitaplığa ekle</string>
+    <string name="trim_dialog_title">Şarkıyı Kırp</string>
+    <string name="trim_start">Başlangıç</string>
+    <string name="trim_end">Bitiş</string>
+    <string name="trim_selected_duration">Kırpılan Süre: %s</string>
+    <string name="trim_preview_play">Önizle</string>
+    <string name="trim_preview_pause">Durdur</string>
+    <string name="trim_get_trend">🔥 Trend / Popüler Kısmı Al</string>
+    <string name="trim_searching_trend">En popüler kısım bulunuyor…</string>
+    <string name="trim_trend_applied">TikTok / Shorts en popüler kısım seçildi!</string>
+    <string name="trim_save_to_library">Kitaplığa Kopya Olarak Ekle</string>
+    <string name="trim_save_success">Şarkı kırpılarak kitaplığınıza kopya olarak eklendi!</string>
+    <string name="trim_save_error">Şarkı kırpılırken bir hata oluştu</string>
+    <string name="trim_title_hint">Yeni şarkı başlığı</string>
+    <string name="trim_loop_preview">Döngüde Çal</string>
+
+    <!-- Format Converter Strings -->
+    <string name="convert_format">Formatı Dönüştür</string>
+    <string name="convert_format_desc">Şarkıyı kaliteden ödün vermeden FLAC, WAV, MP3, M4A veya OPUS yap</string>
+    <string name="convert_dialog_title">Format Dönüştürücü</string>
+    <string name="convert_target_format">Hedef Format</string>
+    <string name="convert_lossless_flac">FLAC (Kayıpsız / Lossless)</string>
+    <string name="convert_lossless_wav">WAV (Stüdyo Master PCM)</string>
+    <string name="convert_high_mp3">MP3 (320 kbps Yüksek Kalite)</string>
+    <string name="convert_high_m4a">M4A / AAC (320 kbps Audiophile)</string>
+    <string name="convert_high_opus">OPUS (256 kbps Kristal Netlik)</string>
+    <string name="convert_flac_desc">Sıfır kalite kaybı, stüdyo düzeyinde kayıpsız ses sıkıştırması.</string>
+    <string name="convert_wav_desc">%100 bit-exact saf PCM ses dalgası, sıfır sıkıştırma kaybı.</string>
+    <string name="convert_mp3_desc">Maksimum cihaz uyumluluğu, 320 kbps stüdyo MP3 standardı.</string>
+    <string name="convert_m4a_desc">Apple ve Android yüksek verimli AAC kodlayıcı, kristal ses.</string>
+    <string name="convert_opus_desc">En modern ses sıkıştırma teknolojisi, yüksek frekans netliği.</string>
+    <string name="convert_start_btn">Dönüştür ve Cihaza Kaydet</string>
+    <string name="convert_in_progress">FFmpeg ile dönüştürülüyor… Lütfen bekleyin</string>
+    <string name="convert_success">Şarkı başarıyla %s formatına dönüştürüldü ve TaşkınMusic klasörüne kaydedildi!</string>
+    <string name="convert_failed">Format dönüştürme başarısız oldu: %s</string>
+    <string name="convert_source_info">Kaynak Format: %s</string>
+    <string name="convert_add_to_library">Cihaz kopyasını kitaplığa da ekle</string>
+    <string name="delete_song_confirm">Are you sure you want to permanently delete this song from your device?</string>
+    <string name="delete_songs_confirm">Are you sure you want to permanently delete %1$d songs from your device?</string>
+    <string name="merge_songs">Şarkıları Birleştir</string>
+    <string name="merge_songs_desc">Seçilen parçaları sırayla tek bir müzik dosyası olarak birleştir</string>
+    <string name="merge_dialog_title">Şarkı Birleştirme</string>
+    <string name="merge_song_order">Parça Sırası</string>
+    <string name="merge_add_song">+ Parça Ekle</string>
+    <string name="merge_choose_song_to_add">Eklenecek Parçayı Seçin</string>
+    <string name="merge_title_hint">Birleştirilmiş Parça Adı</string>
+    <string name="merge_total_duration">Toplam Süre: %1$s (%2$d Parça)</string>
+    <string name="merge_start_btn">Parçaları Birleştir</string>
+    <string name="merge_in_progress">FFmpeg ile parçalar birleştiriliyor… Lütfen bekleyin</string>
+    <string name="merge_success">Şarkılar başarıyla birleştirildi ve Müzik klasörüne kaydedildi!</string>
+    <string name="merge_failed">Şarkı birleştirme başarısız oldu: %s</string>
+    <string name="merge_min_two_songs">Birleştirmek için en az 2 şarkı seçmelisiniz.</string>
 </resources>
