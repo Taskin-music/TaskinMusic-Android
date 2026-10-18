@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="launcher_taskinmusic.png" alt="Taşkın Music App Icon" width="180" />
+<img src="fastlane/metadata/android/en-US/images/icon.png" alt="Taşkın Music App Icon" width="180" />
 
 # Taşkın Music (Android)
 
