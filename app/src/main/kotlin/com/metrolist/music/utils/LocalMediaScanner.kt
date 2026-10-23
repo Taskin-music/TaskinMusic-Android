@@ -223,8 +223,12 @@ class LocalMediaScanner @Inject constructor(
                             if (existing.inLibrary == null) {
                                 database.inLibrary(existing.id, fileDateTime)
                             }
-                            // Update thumbnail if missing or if we found a better YouTube thumbnail
-                            if (existing.thumbnailUrl.isNullOrBlank() || (ytThumbnail != null && existing.thumbnailUrl == contentUri)) {
+                            // Update thumbnail if missing or if we found a better YouTube thumbnail or album art
+                            if (existing.thumbnailUrl.isNullOrBlank() ||
+                                existing.thumbnailUrl == contentUri ||
+                                (ytThumbnail != null && existing.thumbnailUrl != ytThumbnail) ||
+                                (albumArtUri != null && existing.thumbnailUrl != albumArtUri)
+                            ) {
                                 database.updateSongThumbnail(existing.id, finalThumbnail)
                             }
                         } else {

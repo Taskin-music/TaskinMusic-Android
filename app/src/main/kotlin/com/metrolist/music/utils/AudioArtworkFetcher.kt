@@ -38,8 +38,8 @@ class AudioArtworkFetcher(
     override suspend fun fetch(): FetchResult? = withContext(Dispatchers.IO) {
         val uriString = uri.toString()
 
-        // 1. Handle content://media/external/audio/albumart/{albumId}
-        if (uriString.startsWith("content://media/external/audio/albumart")) {
+        // 1. Handle album art URI: content://media/.../albumart/{albumId}
+        if (uriString.contains("/albumart")) {
             // First try opening legacy stream directly
             try {
                 context.contentResolver.openInputStream(uri)?.use { stream ->
@@ -54,9 +54,9 @@ class AudioArtworkFetcher(
                 }
             } catch (_: Exception) { }
 
-            // On Android Q+, legacy provider fails. Find a song belonging to this album and load its thumbnail
+            // Find a song belonging to this album and load its thumbnail or embedded artwork
             val albumId = uri.lastPathSegment?.toLongOrNull()
-            if (albumId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (albumId != null) {
                 try {
                     val projection = arrayOf(MediaStore.Audio.Media._ID)
                     val selection = "${MediaStore.Audio.Media.ALBUM_ID} = ?"
@@ -74,25 +74,46 @@ class AudioArtworkFetcher(
                                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                                 songId,
                             )
-                            val bitmap = context.contentResolver.loadThumbnail(songUri, Size(512, 512), null)
-                            return@withContext ImageFetchResult(
-                                image = bitmap.asImage(),
-                                isSampled = false,
-                                dataSource = DataSource.DISK,
-                            )
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                try {
+                                    val bitmap = context.contentResolver.loadThumbnail(songUri, Size(512, 512), null)
+                                    return@withContext ImageFetchResult(
+                                        image = bitmap.asImage(),
+                                        isSampled = false,
+                                        dataSource = DataSource.DISK,
+                                    )
+                                } catch (_: Exception) { }
+                            }
+                            try {
+                                MediaMetadataRetriever().use { mmr ->
+                                    mmr.setDataSource(context, songUri)
+                                    val picture = mmr.embeddedPicture
+                                    if (picture != null) {
+                                        val bitmap = BitmapFactory.decodeByteArray(picture, 0, picture.size)
+                                        if (bitmap != null) {
+                                            return@withContext ImageFetchResult(
+                                                image = bitmap.asImage(),
+                                                isSampled = false,
+                                                dataSource = DataSource.DISK,
+                                            )
+                                        }
+                                    }
+                                }
+                            } catch (_: Exception) { }
                         }
                     }
                 } catch (_: Exception) { }
             }
         }
 
-        // 2. Handle audio song URI (content://media/external/audio/media/{id} or file://)
-        if (uriString.startsWith("content://media/external/audio/media") ||
+        // 2. Handle audio song URI (content://media/.../audio/media/{id} or file:// or local path)
+        if (uriString.contains("/audio/media") ||
             uriString.startsWith("file://") ||
+            uriString.startsWith("/") ||
             (uri.scheme == "content" && uriString.contains("audio"))
         ) {
             // Try ContentResolver.loadThumbnail on Android Q+
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && uri.scheme == "content") {
                 try {
                     val bitmap = context.contentResolver.loadThumbnail(uri, Size(512, 512), null)
                     return@withContext ImageFetchResult(
@@ -106,7 +127,12 @@ class AudioArtworkFetcher(
             // Try MediaMetadataRetriever to extract embedded artwork (ID3 APIC frame / MP4 covr)
             try {
                 MediaMetadataRetriever().use { mmr ->
-                    mmr.setDataSource(context, uri)
+                    if (uri.scheme == "content") {
+                        mmr.setDataSource(context, uri)
+                    } else {
+                        val path = if (uriString.startsWith("file://")) uriString.removePrefix("file://") else uriString
+                        mmr.setDataSource(path)
+                    }
                     val picture = mmr.embeddedPicture
                     if (picture != null) {
                         val bitmap = BitmapFactory.decodeByteArray(picture, 0, picture.size)
@@ -186,14 +212,40 @@ class AudioArtworkFetcher(
         }
     }
 
-    class Factory(private val context: Context) : Fetcher.Factory<Uri> {
+    class Factory(private val context: Context) : Fetcher.Factory<coil3.Uri> {
+        override fun create(data: coil3.Uri, options: Options, imageLoader: ImageLoader): Fetcher? {
+            val scheme = data.scheme
+            val dataStr = data.toString()
+            if (scheme == "content" && (dataStr.contains("audio") || dataStr.contains("albumart"))) {
+                return AudioArtworkFetcher(context, Uri.parse(dataStr))
+            }
+            if ((scheme == "file" || dataStr.startsWith("/")) &&
+                (dataStr.endsWith(".mp3", ignoreCase = true) ||
+                 dataStr.endsWith(".m4a", ignoreCase = true) ||
+                 dataStr.endsWith(".flac", ignoreCase = true) ||
+                 dataStr.endsWith(".opus", ignoreCase = true) ||
+                 dataStr.endsWith(".ogg", ignoreCase = true))
+            ) {
+                return AudioArtworkFetcher(context, Uri.parse(dataStr))
+            }
+            return null
+        }
+    }
+
+    class AndroidUriFactory(private val context: Context) : Fetcher.Factory<Uri> {
         override fun create(data: Uri, options: Options, imageLoader: ImageLoader): Fetcher? {
             val scheme = data.scheme
             val dataStr = data.toString()
             if (scheme == "content" && (dataStr.contains("audio") || dataStr.contains("albumart"))) {
                 return AudioArtworkFetcher(context, data)
             }
-            if (scheme == "file" && (dataStr.endsWith(".mp3") || dataStr.endsWith(".m4a") || dataStr.endsWith(".flac") || dataStr.endsWith(".opus") || dataStr.endsWith(".ogg"))) {
+            if ((scheme == "file" || dataStr.startsWith("/")) &&
+                (dataStr.endsWith(".mp3", ignoreCase = true) ||
+                 dataStr.endsWith(".m4a", ignoreCase = true) ||
+                 dataStr.endsWith(".flac", ignoreCase = true) ||
+                 dataStr.endsWith(".opus", ignoreCase = true) ||
+                 dataStr.endsWith(".ogg", ignoreCase = true))
+            ) {
                 return AudioArtworkFetcher(context, data)
             }
             return null

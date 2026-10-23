@@ -309,6 +309,7 @@ class App :
             .apply {
                 components {
                     add(com.metrolist.music.utils.AudioArtworkFetcher.Factory(this@App))
+                    add(com.metrolist.music.utils.AudioArtworkFetcher.AndroidUriFactory(this@App))
                 }
                 crossfade(150)
                 allowHardware(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)

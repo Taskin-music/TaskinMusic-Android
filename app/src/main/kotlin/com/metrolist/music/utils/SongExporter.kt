@@ -90,7 +90,9 @@ object SongExporter {
                     }
                 }
 
-                val coverUrl = song.song.thumbnailUrl ?: song.album?.thumbnailUrl
+                val coverUrl = song.song.thumbnailUrl
+                    ?: song.album?.thumbnailUrl
+                    ?: (if (mediaId.length == 11) "https://i.ytimg.com/vi/$mediaId/hqdefault.jpg" else null)
                 val coverFetched = fetchCoverImage(context, coverUrl, tempCover)
 
                 val taggedSuccess = embedMetadataAndCover(
@@ -268,6 +270,12 @@ object SongExporter {
             when {
                 extension.equals("mp3", ignoreCase = true) -> {
                     commandsToTry.add(
+                        "-y -i \"$inputPath\" -i \"$coverPath\" -map 0 -map 1 -c copy -id3v2_version 3 -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+                    )
+                    commandsToTry.add(
+                        "-y -i \"$inputPath\" -i \"$coverPath\" -map 0:a -map 1:0 -c copy -id3v2_version 3 -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+                    )
+                    commandsToTry.add(
                         "-y -i \"$inputPath\" -i \"$coverPath\" -map 0:a -map 1:0 -c:a copy -c:v:0 copy -id3v2_version 3 -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
                     )
                 }
@@ -278,6 +286,12 @@ object SongExporter {
                 }
                 else -> {
                     // M4A / MP4
+                    commandsToTry.add(
+                        "-y -i \"$inputPath\" -i \"$coverPath\" -map 0 -map 1 -c copy -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+                    )
+                    commandsToTry.add(
+                        "-y -i \"$inputPath\" -i \"$coverPath\" -map 0:a -map 1:0 -c copy -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+                    )
                     commandsToTry.add(
                         "-y -i \"$inputPath\" -i \"$coverPath\" -map 0:a -map 1:0 -c:a copy -c:v:0 copy -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
                     )
