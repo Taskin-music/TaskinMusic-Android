@@ -191,7 +191,7 @@ object Updater {
 
     internal fun parseKmpRelease(response: String): ReleaseInfo? {
         val release = JSONObject(response)
-        val assets = parseAssets(release.getJSONArray("assets")).filter { it.name == KMP_APK_NAME }
+        val assets = parseAssets(release.getJSONArray("assets")).filter { it.name == KMP_APK_NAME || it.name == "Metrolist.apk" }
         val tagName = release.getString("tag_name")
 
         return ReleaseInfo(

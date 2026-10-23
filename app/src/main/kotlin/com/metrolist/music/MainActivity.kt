@@ -143,6 +143,7 @@ import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.constants.AppBarHeight
 import com.metrolist.music.constants.AppLanguageKey
 import com.metrolist.music.constants.CheckForUpdatesKey
+import com.metrolist.music.constants.UpdateNotificationsEnabledKey
 import com.metrolist.music.constants.DarkModeKey
 import com.metrolist.music.constants.DefaultOpenTabKey
 import com.metrolist.music.constants.DismissedKmpUpdateKey
@@ -488,6 +489,59 @@ class MainActivity : FragmentActivity() {
         downloadUtil: DownloadUtil,
         syncUtils: SyncUtils,
     ) {
+        val checkForUpdates by rememberPreference(CheckForUpdatesKey, defaultValue = true)
+        var availableUpdate by remember { mutableStateOf<AvailableUpdate?>(null) }
+
+        if (BuildConfig.UPDATER_AVAILABLE) {
+            LaunchedEffect(checkForUpdates) {
+                if (checkForUpdates) {
+                    val preferences = dataStore.data.first()
+                    val notificationsEnabled = preferences[UpdateNotificationsEnabledKey] ?: true
+                    val (releaseInfo, hasUpdate) = Updater.checkForUpdate().getOrNull() ?: (null to false)
+                    releaseInfo?.let { onLatestVersionNameChange(it.versionName) }
+
+                    val standaloneUpdate =
+                        releaseInfo
+                            ?.takeIf { hasUpdate }
+                            ?.let { release ->
+                                Updater.getDownloadUrlForCurrentVariant(release)?.let { downloadUrl ->
+                                    AvailableUpdate(release, downloadUrl, isKmp = false)
+                                }
+                            }
+                    val update = standaloneUpdate
+                    availableUpdate = update?.takeUnless {
+                        it.release.tagName == preferences[it.dismissalKey]
+                    }
+
+                    if (update != null && notificationsEnabled) {
+                        val intent = Intent(Intent.ACTION_VIEW, update.downloadUrl.toUri())
+                        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        val pending = PendingIntent.getActivity(this@MainActivity, 1001, intent, flags)
+                        val notificationText = update.release.versionName
+                        val notification =
+                            NotificationCompat
+                                .Builder(this@MainActivity, "updates")
+                                .setSmallIcon(R.drawable.update)
+                                .setContentTitle(getString(R.string.update_available_title))
+                                .setContentText(notificationText)
+                                .setContentIntent(pending)
+                                .setAutoCancel(true)
+                                .build()
+
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                            ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) ==
+                            PackageManager.PERMISSION_GRANTED
+                        ) {
+                            NotificationManagerCompat.from(this@MainActivity).notify(1001, notification)
+                        }
+                    }
+                } else {
+                    onLatestVersionNameChange(BuildConfig.BASE_VERSION_NAME)
+                    availableUpdate = null
+                }
+            }
+        }
+
         val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = true)
         val enableHighRefreshRate by rememberPreference(EnableHighRefreshRateKey, defaultValue = true)
 
@@ -1392,6 +1446,64 @@ class MainActivity : FragmentActivity() {
                             memberName = familyMemberName,
                             onDismiss = { showWelcomeSplash = false },
                         )
+                    }
+
+                    if (!showChangelog.value) {
+                        availableUpdate?.let { update ->
+                            val dismissUpdate: () -> Unit = {
+                                availableUpdate = null
+                                lifecycleScope.launch {
+                                    safeDataStoreEdit {
+                                        it[update.dismissalKey] = update.release.tagName
+                                    }
+                                }
+                            }
+                            AlertDialog(
+                                onDismissRequest = dismissUpdate,
+                                title = { Text(stringResource(R.string.update_available_title)) },
+                                text = {
+                                    Column(
+                                        modifier =
+                                            Modifier
+                                                .heightIn(max = 480.dp)
+                                                .verticalScroll(rememberScrollState()),
+                                    ) {
+                                        Text(
+                                            text =
+                                                stringResource(
+                                                    R.string.update_available_message,
+                                                    update.release.versionName,
+                                                ),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.changelog),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                                        )
+                                        Text(
+                                            text = update.release.description.ifBlank { stringResource(R.string.changelog_empty) },
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                },
+                                confirmButton = {
+                                    TextButton(
+                                        onClick = {
+                                            dismissUpdate()
+                                            startActivity(Intent(Intent.ACTION_VIEW, update.downloadUrl.toUri()))
+                                        },
+                                    ) {
+                                        Text(stringResource(R.string.update_action))
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = dismissUpdate) {
+                                        Text(stringResource(R.string.kmp_upgrade_later))
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
             }
