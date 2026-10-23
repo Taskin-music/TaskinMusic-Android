@@ -105,6 +105,7 @@ object AudioConverter {
         val workingDir = File(context.cacheDir, "audio_converter").apply { if (!exists()) mkdirs() }
         var tempInputFile: File? = null
         var tempOutputFile: File? = null
+        var tempCoverFile: File? = null
 
         try {
             val cleanId = if (mediaId.startsWith("clip:")) {
@@ -138,7 +139,12 @@ object AudioConverter {
             val outputFileName = "$baseFileName.${targetFormat.extension}"
             tempOutputFile = File(workingDir, "out_${System.currentTimeMillis()}.${targetFormat.extension}")
 
-            // 3. Build FFmpeg command based on selected format
+            // 3. Fetch cover art if available
+            tempCoverFile = File(workingDir, "cover_${System.currentTimeMillis()}.jpg")
+            val coverUrl = song?.song?.thumbnailUrl ?: song?.album?.thumbnailUrl
+            val hasCover = SongExporter.fetchCoverImage(context, coverUrl, tempCoverFile)
+
+            // 4. Build FFmpeg command based on selected format
             val ffmpegCommand = buildFFmpegCommand(
                 inputFile = tempInputFile,
                 outputFile = tempOutputFile,
@@ -146,10 +152,26 @@ object AudioConverter {
                 title = title,
                 artist = artist,
                 album = album,
+                coverFile = if (hasCover) tempCoverFile else null,
             )
 
             Timber.tag(TAG).d("Executing FFmpeg command: $ffmpegCommand")
-            val session = FFmpegKit.execute(ffmpegCommand)
+            var session = FFmpegKit.execute(ffmpegCommand)
+
+            if ((!ReturnCode.isSuccess(session.returnCode) || !tempOutputFile.exists() || tempOutputFile.length() <= 0L) && hasCover) {
+                Timber.tag(TAG).w("FFmpeg conversion with cover failed, retrying without cover")
+                if (tempOutputFile.exists()) tempOutputFile.delete()
+                val fallbackCommand = buildFFmpegCommand(
+                    inputFile = tempInputFile,
+                    outputFile = tempOutputFile,
+                    format = targetFormat,
+                    title = title,
+                    artist = artist,
+                    album = album,
+                    coverFile = null,
+                )
+                session = FFmpegKit.execute(fallbackCommand)
+            }
 
             if (!ReturnCode.isSuccess(session.returnCode) || !tempOutputFile.exists() || tempOutputFile.length() <= 0L) {
                 val errorLogs = session.allLogsAsString
@@ -243,6 +265,7 @@ object AudioConverter {
             try {
                 tempInputFile?.delete()
                 tempOutputFile?.delete()
+                tempCoverFile?.delete()
             } catch (_: Exception) {}
         }
     }
@@ -254,13 +277,14 @@ object AudioConverter {
         title: String,
         artist: String,
         album: String,
+        coverFile: File? = null,
     ): String {
         val inputPath = inputFile.absolutePath
         val outputPath = outputFile.absolutePath
 
-        val cleanTitle = title.replace("\"", "\\\"")
-        val cleanArtist = artist.replace("\"", "\\\"")
-        val cleanAlbum = album.replace("\"", "\\\"")
+        val cleanTitle = title.replace("\r", " ").replace("\n", " ").replace("\"", "\\\"").trim()
+        val cleanArtist = artist.replace("\r", " ").replace("\n", " ").replace("\"", "\\\"").trim()
+        val cleanAlbum = album.replace("\r", " ").replace("\n", " ").replace("\"", "\\\"").trim()
 
         val codecArgs = when (format) {
             AudioTargetFormat.FLAC -> "-c:a flac -compression_level 8"
@@ -268,6 +292,22 @@ object AudioConverter {
             AudioTargetFormat.MP3 -> "-c:a libmp3lame -b:a 320k -q:a 0"
             AudioTargetFormat.M4A -> "-c:a aac -b:a 320k"
             AudioTargetFormat.OPUS -> "-c:a libopus -b:a 256k -vbr on"
+        }
+
+        if (coverFile != null && coverFile.exists() && coverFile.length() > 0L) {
+            val coverPath = coverFile.absolutePath
+            return when (format) {
+                AudioTargetFormat.MP3 ->
+                    "-y -i \"$inputPath\" -i \"$coverPath\" -map 0:a -map 1:0 $codecArgs -c:v:0 copy -id3v2_version 3 -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+                AudioTargetFormat.M4A ->
+                    "-y -i \"$inputPath\" -i \"$coverPath\" -map 0:a -map 1:0 $codecArgs -c:v:0 copy -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+                AudioTargetFormat.FLAC ->
+                    "-y -i \"$inputPath\" -i \"$coverPath\" -map 0:a -map 1:0 $codecArgs -c:v:0 copy -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+                AudioTargetFormat.OPUS ->
+                    "-y -i \"$inputPath\" -i \"$coverPath\" -map 0:a -map 1:0 $codecArgs -c:v:0 mjpeg -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+                AudioTargetFormat.WAV ->
+                    "-y -i \"$inputPath\" -vn $codecArgs -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+            }
         }
 
         return "-y -i \"$inputPath\" -vn $codecArgs -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""

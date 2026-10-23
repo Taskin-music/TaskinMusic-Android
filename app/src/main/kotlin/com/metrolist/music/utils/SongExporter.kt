@@ -2,11 +2,20 @@ package com.metrolist.music.utils
 
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.media3.datasource.cache.Cache
+import coil3.imageLoader
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.request.allowHardware
+import coil3.toBitmap
+import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.ReturnCode
 import com.metrolist.music.db.MusicDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
@@ -33,6 +42,7 @@ object SongExporter {
 
     /**
      * Exports a downloaded song from the app's cache to the public Music directory via MediaStore.
+     * Embeds physical audio tags (title, artist, album) and album cover artwork directly into the file.
      */
     suspend fun exportSongToMusicFolder(
         context: Context,
@@ -66,90 +76,253 @@ object SongExporter {
                 error("No complete cached spans found for $mediaId")
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val resolver = context.contentResolver
-                val relativePath = "${Environment.DIRECTORY_MUSIC}/"
+            val workingDir = File(context.cacheDir, "export_${System.currentTimeMillis()}_${(1000..9999).random()}").apply { mkdirs() }
+            val tempRawInput = File(workingDir, "raw_in.$extension")
+            val tempTaggedOutput = File(workingDir, "tagged_out.$extension")
+            val tempCover = File(workingDir, "cover.jpg")
 
-                val values = ContentValues().apply {
-                    put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
-                    put(MediaStore.Audio.Media.TITLE, rawTitle)
-                    put(MediaStore.Audio.Media.ARTIST, rawArtist)
-                    put(MediaStore.Audio.Media.ALBUM, rawAlbum)
-                    put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
-                    put(MediaStore.Audio.Media.RELATIVE_PATH, relativePath)
-                    put(MediaStore.Audio.Media.IS_PENDING, 1)
-                    if (song.song.duration > 0) {
-                        put(MediaStore.Audio.Media.DURATION, song.song.duration * 1000L)
-                    }
-                }
-
-                val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                val destUri = resolver.insert(collection, values)
-                    ?: error("Failed to insert MediaStore audio record")
-
-                resolver.openOutputStream(destUri)?.use { out ->
-                    for (span in spans) {
-                        span.file?.inputStream()?.use { input ->
-                            input.copyTo(out)
-                        }
-                    }
-                } ?: error("Failed to open output stream for $destUri")
-
-                val completeValues = ContentValues().apply {
-                    put(MediaStore.Audio.Media.IS_PENDING, 0)
-                }
-                resolver.update(destUri, completeValues, null, null)
-
-                val actualPath = try {
-                    resolver.query(destUri, arrayOf(MediaStore.Audio.Media.DATA), null, null, null)?.use { cursor ->
-                        if (cursor.moveToFirst()) {
-                            val dataIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
-                            if (dataIdx != -1) cursor.getString(dataIdx) else null
-                        } else null
-                    }
-                } catch (_: Exception) { null }
-
-                if (!actualPath.isNullOrBlank()) {
-                    android.media.MediaScannerConnection.scanFile(context, arrayOf(actualPath), arrayOf(mimeType), null)
-                }
-
-                registerExportedSong(
-                    context = context,
-                    mediaId = mediaId,
-                    contentUri = destUri.toString(),
-                    dataPath = actualPath,
-                    fileName = fileName,
-                )
-
-                Timber.tag(TAG).i("Exported $fileName to MediaStore: $destUri")
-                destUri
-            } else {
-                @Suppress("DEPRECATION")
-                val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
-                if (!musicDir.exists()) musicDir.mkdirs()
-                val targetFile = File(musicDir, fileName)
-                FileOutputStream(targetFile).use { out ->
+            try {
+                FileOutputStream(tempRawInput).use { out ->
                     for (span in spans) {
                         span.file?.inputStream()?.use { input ->
                             input.copyTo(out)
                         }
                     }
                 }
-                android.media.MediaScannerConnection.scanFile(context, arrayOf(targetFile.absolutePath), arrayOf(mimeType), null)
-                val destUri = Uri.fromFile(targetFile)
-                registerExportedSong(
-                    context = context,
-                    mediaId = mediaId,
-                    contentUri = destUri.toString(),
-                    dataPath = targetFile.absolutePath,
-                    fileName = fileName,
+
+                val coverUrl = song.song.thumbnailUrl ?: song.album?.thumbnailUrl
+                val coverFetched = fetchCoverImage(context, coverUrl, tempCover)
+
+                val taggedSuccess = embedMetadataAndCover(
+                    inputFile = tempRawInput,
+                    coverFile = if (coverFetched) tempCover else null,
+                    outputFile = tempTaggedOutput,
+                    extension = extension,
+                    title = rawTitle,
+                    artist = rawArtist,
+                    album = rawAlbum,
                 )
-                Timber.tag(TAG).i("Exported $fileName to storage: $destUri")
-                destUri
+
+                val fileToSave = if (taggedSuccess && tempTaggedOutput.exists() && tempTaggedOutput.length() > 0L) {
+                    tempTaggedOutput
+                } else {
+                    tempRawInput
+                }
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val resolver = context.contentResolver
+                    val relativePath = "${Environment.DIRECTORY_MUSIC}/"
+
+                    val values = ContentValues().apply {
+                        put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
+                        put(MediaStore.Audio.Media.TITLE, rawTitle)
+                        put(MediaStore.Audio.Media.ARTIST, rawArtist)
+                        put(MediaStore.Audio.Media.ALBUM, rawAlbum)
+                        put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
+                        put(MediaStore.Audio.Media.RELATIVE_PATH, relativePath)
+                        put(MediaStore.Audio.Media.IS_PENDING, 1)
+                        if (song.song.duration > 0) {
+                            put(MediaStore.Audio.Media.DURATION, song.song.duration * 1000L)
+                        }
+                    }
+
+                    val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                    val destUri = resolver.insert(collection, values)
+                        ?: error("Failed to insert MediaStore audio record")
+
+                    resolver.openOutputStream(destUri)?.use { out ->
+                        fileToSave.inputStream().use { input ->
+                            input.copyTo(out)
+                        }
+                    } ?: error("Failed to open output stream for $destUri")
+
+                    val completeValues = ContentValues().apply {
+                        put(MediaStore.Audio.Media.IS_PENDING, 0)
+                    }
+                    resolver.update(destUri, completeValues, null, null)
+
+                    val actualPath = try {
+                        resolver.query(destUri, arrayOf(MediaStore.Audio.Media.DATA), null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val dataIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+                                if (dataIdx != -1) cursor.getString(dataIdx) else null
+                            } else null
+                        }
+                    } catch (_: Exception) { null }
+
+                    if (!actualPath.isNullOrBlank()) {
+                        android.media.MediaScannerConnection.scanFile(context, arrayOf(actualPath), arrayOf(mimeType), null)
+                    }
+
+                    registerExportedSong(
+                        context = context,
+                        mediaId = mediaId,
+                        contentUri = destUri.toString(),
+                        dataPath = actualPath,
+                        fileName = fileName,
+                    )
+
+                    Timber.tag(TAG).i("Exported $fileName with embedded tags/cover to MediaStore: $destUri")
+                    destUri
+                } else {
+                    @Suppress("DEPRECATION")
+                    val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
+                    if (!musicDir.exists()) musicDir.mkdirs()
+                    val targetFile = File(musicDir, fileName)
+                    FileOutputStream(targetFile).use { out ->
+                        fileToSave.inputStream().use { input ->
+                            input.copyTo(out)
+                        }
+                    }
+                    android.media.MediaScannerConnection.scanFile(context, arrayOf(targetFile.absolutePath), arrayOf(mimeType), null)
+                    val destUri = Uri.fromFile(targetFile)
+                    registerExportedSong(
+                        context = context,
+                        mediaId = mediaId,
+                        contentUri = destUri.toString(),
+                        dataPath = targetFile.absolutePath,
+                        fileName = fileName,
+                    )
+                    Timber.tag(TAG).i("Exported $fileName with embedded tags/cover to storage: $destUri")
+                    destUri
+                }
+            } finally {
+                try {
+                    workingDir.deleteRecursively()
+                } catch (_: Exception) {}
             }
         }.onFailure { e ->
             Timber.tag(TAG).e(e, "Failed to export song $mediaId to Music folder")
         }
+    }
+
+    internal suspend fun fetchCoverImage(context: Context, url: String?, outputFile: File): Boolean =
+        withContext(Dispatchers.IO) {
+            if (url.isNullOrBlank()) return@withContext false
+            // 1. Try Coil image loader first (checks memory/disk cache and network)
+            try {
+                val request = ImageRequest.Builder(context)
+                    .data(url)
+                    .allowHardware(false)
+                    .build()
+                val result = context.imageLoader.execute(request)
+                if (result is SuccessResult) {
+                    val bitmap = result.image.toBitmap()
+                    FileOutputStream(outputFile).use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                    }
+                    if (outputFile.exists() && outputFile.length() > 0L) {
+                        return@withContext true
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.tag(TAG).w(e, "Coil failed to fetch cover from $url")
+            }
+
+            // 2. Direct HTTP download fallback
+            try {
+                val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 10000
+                connection.readTimeout = 10000
+                connection.doInput = true
+                connection.connect()
+                if (connection.responseCode in 200..299) {
+                    val bitmap = BitmapFactory.decodeStream(connection.inputStream)
+                    if (bitmap != null) {
+                        FileOutputStream(outputFile).use { out ->
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                        }
+                        if (outputFile.exists() && outputFile.length() > 0L) {
+                            return@withContext true
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.tag(TAG).w(e, "Direct HTTP failed to fetch cover from $url")
+            }
+
+            false
+        }
+
+    private fun embedMetadataAndCover(
+        inputFile: File,
+        coverFile: File?,
+        outputFile: File,
+        extension: String,
+        title: String,
+        artist: String,
+        album: String,
+    ): Boolean {
+        val inputPath = inputFile.absolutePath
+        val outputPath = outputFile.absolutePath
+        val cleanTitle = cleanMetadata(title)
+        val cleanArtist = cleanMetadata(artist)
+        val cleanAlbum = cleanMetadata(album)
+
+        val hasCover = coverFile != null && coverFile.exists() && coverFile.length() > 0L
+        val coverPath = coverFile?.absolutePath
+
+        val commandsToTry = mutableListOf<String>()
+
+        if (hasCover && coverPath != null) {
+            when {
+                extension.equals("mp3", ignoreCase = true) -> {
+                    commandsToTry.add(
+                        "-y -i \"$inputPath\" -i \"$coverPath\" -map 0:a -map 1:0 -c:a copy -c:v:0 copy -id3v2_version 3 -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+                    )
+                }
+                extension.equals("opus", ignoreCase = true) || extension.equals("ogg", ignoreCase = true) -> {
+                    commandsToTry.add(
+                        "-y -i \"$inputPath\" -i \"$coverPath\" -map 0:a -map 1:0 -c:a copy -c:v:0 mjpeg -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+                    )
+                }
+                else -> {
+                    // M4A / MP4
+                    commandsToTry.add(
+                        "-y -i \"$inputPath\" -i \"$coverPath\" -map 0:a -map 1:0 -c:a copy -c:v:0 copy -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+                    )
+                    commandsToTry.add(
+                        "-y -i \"$inputPath\" -i \"$coverPath\" -map 0:a -map 1:0 -c:a copy -c:v:0 mjpeg -disposition:v:0 attached_pic -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+                    )
+                }
+            }
+        }
+
+        // Fallback without cover (metadata tags only)
+        if (extension.equals("mp3", ignoreCase = true)) {
+            commandsToTry.add(
+                "-y -i \"$inputPath\" -map 0:a -c:a copy -id3v2_version 3 -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+            )
+        } else {
+            commandsToTry.add(
+                "-y -i \"$inputPath\" -map 0:a -c:a copy -metadata title=\"$cleanTitle\" -metadata artist=\"$cleanArtist\" -metadata album=\"$cleanAlbum\" \"$outputPath\""
+            )
+        }
+
+        for (cmd in commandsToTry) {
+            Timber.tag(TAG).d("Running FFmpeg tag embed: $cmd")
+            val session = FFmpegKit.execute(cmd)
+            if (ReturnCode.isSuccess(session.returnCode) && outputFile.exists() && outputFile.length() > 0L) {
+                Timber.tag(TAG).i("Successfully embedded metadata/cover into $outputPath")
+                return true
+            } else {
+                Timber.tag(TAG).w("FFmpeg tag command failed (${session.returnCode}): ${session.allLogsAsString?.take(200)}")
+                if (outputFile.exists()) {
+                    outputFile.delete()
+                }
+            }
+        }
+
+        return false
+    }
+
+    private fun cleanMetadata(value: String): String {
+        return value.replace("\r", " ")
+            .replace("\n", " ")
+            .replace("\"", "\\\"")
+            .replace("$", "\\$")
+            .replace("`", "'")
+            .trim()
     }
 
     private const val PREFS_NAME = "exported_songs"
