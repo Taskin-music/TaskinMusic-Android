@@ -1,17 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Taşkın Müzik — Android Bildirim Çubuğu Monokrom İkonu -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:height="200dp"
-    android:width="200dp"
-    android:viewportWidth="35.0"
-    android:viewportHeight="35.0">
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
     <group
-        android:scaleX="0.7"
-        android:scaleY="0.7"
-        android:translateX="5.2"
-        android:translateY="5.3">
+        android:scaleX="0.08"
+        android:scaleY="0.08"
+        android:translateX="1.76"
+        android:translateY="1.76">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M 44,44 L 212,44 A 15,15 0 0,1 227,59 L 227,59 A 15,15 0 0,1 212,74 L 44,74 A 15,15 0 0,1 29,59 L 29,59 A 15,15 0 0,1 44,44 Z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M 115,74 L 141,74 L 141,166 L 115,166 Z" />
+        <group
+            android:pivotX="104"
+            android:pivotY="178"
+            android:rotation="-25">
+            <path
+                android:fillColor="#FFFFFFFF"
+                android:pathData="M 62,178 a 42,32 0 1,0 84,0 a 42,32 0 1,0 -84,0" />
+        </group>
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M 115,140 Q 115,156 102,154 L 115,158 Z" />
         <path
             android:fillColor="#00000000"
-            android:pathData="M11.7,17.037L5.907,22.83C5.517,23.22 5.517,23.853 5.907,24.244L11.493,29.83C11.883,30.22 12.517,30.22 12.907,29.83L18.907,23.83C19.095,23.642 19.2,23.388 19.2,23.122V6.004C19.2,5.115 20.274,4.668 20.905,5.295L30.2,14.536"
             android:strokeColor="#FFFFFFFF"
-            android:strokeWidth="5.0" />
+            android:strokeWidth="10"
+            android:strokeLineCap="round"
+            android:pathData="M 158,146 A 36,36 0 0,1 158,198" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="10"
+            android:strokeLineCap="round"
+            android:pathData="M 180,134 A 56,56 0 0,1 180,210" />
     </group>
 </vector>

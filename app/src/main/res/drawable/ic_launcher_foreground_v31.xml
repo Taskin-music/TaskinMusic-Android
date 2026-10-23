@@ -1,17 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Taşkın Müzik — Adaptive Launcher Foreground (108dp Safe Zone) -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:height="108dp"
     android:width="108dp"
-    android:viewportWidth="30.0"
-    android:viewportHeight="32.0">
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
     <group
-        android:scaleX="0.47"
-        android:scaleY="0.5"
-        android:translateX="7.8"
-        android:translateY="8.0">
+        android:scaleX="0.23"
+        android:scaleY="0.23"
+        android:translateX="24.56"
+        android:translateY="24.56">
+        <!-- T Çatısı (Sonic Indigo) -->
+        <path
+            android:fillColor="#4F46E5"
+            android:pathData="M 44,44 L 212,44 A 15,15 0 0,1 227,59 L 227,59 A 15,15 0 0,1 212,74 L 44,74 A 15,15 0 0,1 29,59 L 29,59 A 15,15 0 0,1 44,44 Z" />
+        <!-- Dikey Gövde -->
+        <path
+            android:fillColor="#4F46E5"
+            android:pathData="M 115,74 L 141,74 L 141,166 L 115,166 Z" />
+        <!-- Nota Başı (-25 deg) -->
+        <group
+            android:pivotX="104"
+            android:pivotY="178"
+            android:rotation="-25">
+            <path
+                android:fillColor="#4F46E5"
+                android:pathData="M 62,178 a 42,32 0 1,0 84,0 a 42,32 0 1,0 -84,0" />
+        </group>
+        <!-- Fillet -->
+        <path
+            android:fillColor="#4F46E5"
+            android:pathData="M 115,140 Q 115,156 102,154 L 115,158 Z" />
+        <!-- Akustik Dalgalar (Acoustic Coral) -->
         <path
             android:fillColor="#00000000"
-            android:pathData="M9.5,15.5L3.707,21.293C3.317,21.684 3.317,22.317 3.707,22.707L9.293,28.293C9.683,28.684 10.317,28.684 10.707,28.293L16.707,22.293C16.895,22.105 17,21.851 17,21.586V4.468C17,3.578 18.074,3.132 18.705,3.759L28,13"
-            android:strokeColor="#FFFFFFFF"
-            android:strokeWidth="5.0" />
+            android:strokeColor="#F43F5E"
+            android:strokeWidth="8"
+            android:strokeLineCap="round"
+            android:pathData="M 158,146 A 36,36 0 0,1 158,198" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#F43F5E"
+            android:strokeWidth="8"
+            android:strokeLineCap="round"
+            android:pathData="M 180,134 A 56,56 0 0,1 180,210" />
     </group>
 </vector>

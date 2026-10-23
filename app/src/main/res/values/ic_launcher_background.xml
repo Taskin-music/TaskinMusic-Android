@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#000000</color>
-    <color name="teal_200">#80CBC4</color>
-    <color name="teal_700">#00796B</color>
+    <!-- Beyaz Zemin (Sonic Indigo & Acoustic Coral kontrastını öne çıkarır) -->
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="ic_launcher_static_background">#FFFFFF</color>
+    <color name="teal_200">#4F46E5</color>
+    <color name="teal_700">#3730A3</color>
 </resources>
